@@ -7,12 +7,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
+
+import com.sun.management.OperatingSystemMXBean;
 
 /**
  * Collects benchmark metrics during a Linear Road benchmark run.
@@ -25,6 +30,17 @@ public class BenchmarkMetrics {
     private static final Logger logger = LoggerFactory.getLogger(BenchmarkMetrics.class);
 
     private final long startTimeMs = System.currentTimeMillis();
+
+    // --- CPU & Memory ---
+    private final OperatingSystemMXBean osMxBean =
+            (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+    private final MemoryMXBean memoryMxBean = ManagementFactory.getMemoryMXBean();
+    private final Runtime runtime = Runtime.getRuntime();
+
+    // Peak values tracked across all snapshots
+    private volatile double peakCpuLoad = 0;
+    private volatile long peakHeapUsedBytes = 0;
+    private volatile long peakRssBytes = 0;
 
     // --- Throughput ---
     private final LongAdder recordsIngested = new LongAdder();
@@ -65,13 +81,34 @@ public class BenchmarkMetrics {
     }
 
     /**
-     * Takes a point-in-time snapshot for time-series analysis.
+     * Takes a point-in-time snapshot for time-series analysis, including CPU and memory.
      */
     public void takeSnapshot() {
+        double processCpuLoad = osMxBean.getProcessCpuLoad();
+        if (processCpuLoad < 0) processCpuLoad = 0; // -1 means not available
+
+        MemoryUsage heapUsage = memoryMxBean.getHeapMemoryUsage();
+        long heapUsedBytes = heapUsage.getUsed();
+        long heapMaxBytes = heapUsage.getMax();
+
+        // Committed memory (resident-ish for JVM)
+        long committedHeapBytes = heapUsage.getCommitted();
+        MemoryUsage nonHeapUsage = memoryMxBean.getNonHeapMemoryUsage();
+        long totalCommittedBytes = committedHeapBytes + nonHeapUsage.getCommitted();
+
+        // Track peaks
+        if (processCpuLoad > peakCpuLoad) peakCpuLoad = processCpuLoad;
+        if (heapUsedBytes > peakHeapUsedBytes) peakHeapUsedBytes = heapUsedBytes;
+        if (totalCommittedBytes > peakRssBytes) peakRssBytes = totalCommittedBytes;
+
         snapshots.add(new Snapshot(
                 System.currentTimeMillis() - startTimeMs,
                 recordsIngested.sum(),
-                recordsProcessed.sum()
+                recordsProcessed.sum(),
+                processCpuLoad,
+                heapUsedBytes,
+                heapMaxBytes,
+                totalCommittedBytes
         ));
     }
 
@@ -130,6 +167,9 @@ public class BenchmarkMetrics {
                 new TreeMap<>(getStreamCounts()),
                 new TreeMap<>(getResponseLatencyStats()),
                 getPartitionSkew(),
+                new ResourceStats(peakCpuLoad, peakHeapUsedBytes, peakRssBytes,
+                        runtime.availableProcessors(),
+                        runtime.maxMemory()),
                 streams != null ? extractKafkaStreamsMetrics(streams) : Collections.emptyMap(),
                 new ArrayList<>(snapshots)
         );
@@ -210,7 +250,21 @@ public class BenchmarkMetrics {
         }
     }
 
-    public record Snapshot(long elapsedMs, long ingested, long processed) {
+    public record ResourceStats(double peakCpuLoad, long peakHeapUsedBytes, long peakCommittedBytes,
+                                int availableProcessors, long maxHeapBytes) {
+        @Override
+        public String toString() {
+            return String.format("cpuPeak=%.1f%% heapPeak=%dMB committed=%dMB maxHeap=%dMB cores=%d",
+                    peakCpuLoad * 100,
+                    peakHeapUsedBytes / (1024 * 1024),
+                    peakCommittedBytes / (1024 * 1024),
+                    maxHeapBytes / (1024 * 1024),
+                    availableProcessors);
+        }
+    }
+
+    public record Snapshot(long elapsedMs, long ingested, long processed,
+                           double cpuLoad, long heapUsedBytes, long heapMaxBytes, long committedBytes) {
     }
 
     public record BenchmarkReport(
@@ -220,6 +274,7 @@ public class BenchmarkMetrics {
             Map<String, Long> recordsPerStream,
             Map<String, LatencyStats> responseLatencies,
             PartitionSkew partitionSkew,
+            ResourceStats resourceStats,
             Map<String, Double> kafkaStreamsMetrics,
             List<Snapshot> throughputTimeline
     ) {
@@ -252,6 +307,14 @@ public class BenchmarkMetrics {
             System.out.println("╠══════════════════════════════════════════════════╣");
             System.out.printf("║ PARTITION SKEW:     %s%n", partitionSkew);
 
+            System.out.println("╠══════════════════════════════════════════════════╣");
+            System.out.println("║ RESOURCE USAGE:");
+            System.out.printf("║   Peak CPU load:      %.1f%%%n", resourceStats.peakCpuLoad() * 100);
+            System.out.printf("║   Peak heap used:     %,d MB%n", resourceStats.peakHeapUsedBytes() / (1024 * 1024));
+            System.out.printf("║   Peak committed mem: %,d MB%n", resourceStats.peakCommittedBytes() / (1024 * 1024));
+            System.out.printf("║   Max heap:           %,d MB%n", resourceStats.maxHeapBytes() / (1024 * 1024));
+            System.out.printf("║   Available CPUs:     %d%n", resourceStats.availableProcessors());
+
             if (!kafkaStreamsMetrics.isEmpty()) {
                 System.out.println("╠══════════════════════════════════════════════════╣");
                 System.out.println("║ KAFKA STREAMS INTERNAL METRICS:");
@@ -267,9 +330,14 @@ public class BenchmarkMetrics {
 
         public void writeCsv(File outputFile) throws IOException {
             try (PrintWriter w = new PrintWriter(new FileWriter(outputFile))) {
-                w.println("elapsed_ms,ingested,processed");
+                w.println("elapsed_ms,ingested,processed,cpu_load,heap_used_mb,heap_max_mb,committed_mb");
                 for (Snapshot s : throughputTimeline) {
-                    w.printf("%d,%d,%d%n", s.elapsedMs(), s.ingested(), s.processed());
+                    w.printf("%d,%d,%d,%.4f,%d,%d,%d%n",
+                            s.elapsedMs(), s.ingested(), s.processed(),
+                            s.cpuLoad(),
+                            s.heapUsedBytes() / (1024 * 1024),
+                            s.heapMaxBytes() / (1024 * 1024),
+                            s.committedBytes() / (1024 * 1024));
                 }
             }
         }
