@@ -1,9 +1,7 @@
 package de.twiechert.linroad.kafka;
 
-import de.twiechert.linroad.jdriver.DataDriver;
-import de.twiechert.linroad.jdriver.DataDriverLibrary;
 import de.twiechert.linroad.kafka.core.Void;
-import de.twiechert.linroad.kafka.feeder.DataFeeder;
+import de.twiechert.linroad.kafka.feeder.JavaDataFeeder;
 import de.twiechert.linroad.kafka.feeder.PositionReportHandler;
 import de.twiechert.linroad.kafka.feeder.historical.HistoricalDataFeeder;
 import de.twiechert.linroad.kafka.model.*;
@@ -71,7 +69,7 @@ public class LinearRoadKafkaBenchmarkApplication {
         private HistoricalDataFeeder historicalDataFeeder;
 
         @Autowired
-        private DataFeeder positionReporter;
+        private JavaDataFeeder positionReporter;
 
         @Autowired
         private LatestAverageVelocityStreamBuilder latestAverageVelocityStreamBuilder;
@@ -286,9 +284,6 @@ public class LinearRoadKafkaBenchmarkApplication {
         @Value("#{'${linearroad.mode.debug}'.split(',')}")
         private List<String> debugMode;
 
-        @Value("${linearroad.datadriver.path}")
-        private String dataDriverPath;
-
         @Value("${linearroad.kafka.bootstrapservers}")
         private String bootstrapServers;
 
@@ -359,10 +354,6 @@ public class LinearRoadKafkaBenchmarkApplication {
             return linearRoadMode;
         }
 
-        public String getDataDriverPath() {
-            return dataDriverPath;
-        }
-
         public List<String> getDebugList() {
             return debugMode;
         }
@@ -374,19 +365,6 @@ public class LinearRoadKafkaBenchmarkApplication {
         public void setBuilder(StreamsBuilder builder) {
             this.builder = builder;
         }
-    }
-
-
-    @Bean
-    public DataDriverLibrary getDataDriverLibrary(DataDriver dataDriver) {
-        return dataDriver.getLibrary();
-    }
-
-
-    @Bean
-    public DataDriver getDataDriver(Context context) {
-        logger.debug("Path to file is {}", context.getFilePath());
-        return new DataDriver(context.getFilePath(), context.getDataDriverPath(), DataDriver.Architecture.X64_LINUX);
     }
 
 

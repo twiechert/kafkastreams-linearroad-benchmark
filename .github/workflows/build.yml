@@ -25,3 +25,6 @@ jobs:
 
       - name: Run tests
         run: mvn test -B
+
+      - name: Package
+        run: mvn package -Dmaven.test.skip=true -B

@@ -86,11 +86,6 @@
             <version>2.12.7</version>
         </dependency>
         <dependency>
-            <groupId>com.github.twiechert</groupId>
-            <artifactId>linearroad-java-driver</artifactId>
-            <version>19881f6007</version>
-        </dependency>
-        <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.14.0</version>
