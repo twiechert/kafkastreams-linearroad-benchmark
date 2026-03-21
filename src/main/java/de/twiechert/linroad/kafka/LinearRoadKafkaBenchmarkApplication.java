@@ -18,10 +18,11 @@ import de.twiechert.linroad.kafka.stream.historical.table.TollHistoryTableBuilde
 import net.moznion.random.string.RandomStringGenerator;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KStreamBuilder;
 import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Printed;
 import org.joda.time.DateTime;
 import org.joda.time.Seconds;
 import org.slf4j.Logger;
@@ -38,6 +39,8 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.Properties;
 
@@ -115,14 +118,14 @@ public class LinearRoadKafkaBenchmarkApplication {
         @Override
         public void run(String... var1) throws Exception {
             logger.debug("Using mode {}", context.getLinearRoadMode());
-            KStreamBuilder builder = new KStreamBuilder();
+            StreamsBuilder builder = new StreamsBuilder();
             context.setBuilder(builder);
             KTable<XwayVehicleIdDay, Double> tollHistoryTable = null;
 
             // historical info feeding
             if (!context.getLinearRoadMode().equals("no-historical-feed")) {
                 tollHistoryTable = tollHistoryTableBuilder.getTable(builder);
-                if (context.getDebugList().contains("TOLL_HIST")) tollHistoryTable.print();
+                if (context.getDebugList().contains("TOLL_HIST")) tollHistoryTable.toStream().print(Printed.toSysOut());
 
             }
 
@@ -138,62 +141,74 @@ public class LinearRoadKafkaBenchmarkApplication {
                   Converting position reports to processable Kafka stream
                  */
                 KStream<XwaySegmentDirection, PositionReport> positionReportStream = positionReportStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("POS_REP")) positionReportStream.print();
+                if (context.getDebugList().contains("POS_REP")) positionReportStream.print(Printed.toSysOut());
 
                 /*
                   A reduced version of the position report stream, that only considers the first position report within a segment per vehicle.
                   This is required for both the accident and toll notification, which are only triggered, if a position report has no predecessor from the same segment.
                  */
                 KStream<VehicleIdXwayDirection, SegmentCrossing> segmentCrossingPositionReportStream = segmentCrossingPositionReportBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("POS_SEG")) segmentCrossingPositionReportStream.print();
+                if (context.getDebugList().contains("POS_SEG")) segmentCrossingPositionReportStream.print(Printed.toSysOut());
 
                 /*
                   Converting account balance request to processable Kafka stream
                  */
                 KStream<AccountBalanceRequest, Void> accountBalanceRequestStream = accountBalanceStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("ACCB_REQ")) accountBalanceRequestStream.print();
+                if (context.getDebugList().contains("ACCB_REQ")) accountBalanceRequestStream.print(Printed.toSysOut());
 
                 /*
                   Converting daily expenditure request to processable Kafka stream
                  */
                 KStream<DailyExpenditureRequest, Void> dailyExpenditureRequestStream = dailyExpenditureRequestStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("DEXP_REQ")) dailyExpenditureRequestStream.print();
+                if (context.getDebugList().contains("DEXP_REQ")) dailyExpenditureRequestStream.print(Printed.toSysOut());
 
                 /*
                   Building NOV stream
                  */
                 KStream<XwaySegmentDirection, NumberOfVehicles> numberOfVehiclesStream = numberOfVehiclesStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("NOV")) numberOfVehiclesStream.print();
+                if (context.getDebugList().contains("NOV")) numberOfVehiclesStream.print(Printed.toSysOut());
 
                 /*
                   Building LAV stream
                  */
                 KStream<XwaySegmentDirection, AverageVelocity> latestAverageVelocityStream = latestAverageVelocityStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("LAV")) latestAverageVelocityStream.print();
+                if (context.getDebugList().contains("LAV")) latestAverageVelocityStream.print(Printed.toSysOut());
 
                 /*
                   Building Accident detection stream
                  */
                 KStream<XwaySegmentDirection, Long> accidentDetectionStream = accidentDetectionStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("ACC_DET")) accidentDetectionStream.print();
+                if (context.getDebugList().contains("ACC_DET")) accidentDetectionStream.print(Printed.toSysOut());
 
                 /*
                   Building Accident notification stream
                  */
                 KStream<Void, AccidentNotification> accidentNotificationStream = accidentNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, accidentDetectionStream);
-                accidentNotificationStream.writeAsText("output/" + accidentNotificationStreamBuilder.getOutputTopic() + ".csv", accidentNotificationStreamBuilder.getKeySerde(), accidentNotificationStreamBuilder.getValueSerde());
+                accidentNotificationStream.foreach((k, v) -> {
+                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + accidentNotificationStreamBuilder.getOutputTopic() + ".csv", true))) {
+                        pw.println(k + "," + v);
+                    } catch (Exception e) {
+                        logger.error("Error writing accident notification", e);
+                    }
+                });
 
                 /*
                   Building current toll per Xway-Segmen-Directon tuple stream
                  */
                 KStream<XwaySegmentDirection, CurrentToll> currentTollStream = currentTollStreamBuilder.getStream(latestAverageVelocityStream, numberOfVehiclesStream, accidentDetectionStream);
-                if (context.getDebugList().contains("CURR_TOLL")) currentTollStream.print();
+                if (context.getDebugList().contains("CURR_TOLL")) currentTollStream.print(Printed.toSysOut());
 
                 /*
                   Building stream to notify driver about tolls
                  */
                 KStream<Void, TollNotification> tollNotificationStream = tollNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
-                tollNotificationStream.writeAsText("output/" + tollNotificationStreamBuilder.getOutputTopic() + ".csv", tollNotificationStreamBuilder.getKeySerde(), tollNotificationStreamBuilder.getValueSerde());
+                tollNotificationStream.foreach((k, v) -> {
+                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + tollNotificationStreamBuilder.getOutputTopic() + ".csv", true))) {
+                        pw.println(k + "," + v);
+                    } catch (Exception e) {
+                        logger.error("Error writing toll notification", e);
+                    }
+                });
 
 
                 /*
@@ -203,24 +218,36 @@ public class LinearRoadKafkaBenchmarkApplication {
                  */
                 // this table may be derived from the above (how to realize in Kafka streams?)
                 KTable<Integer, ExpenditureAt> tollPerVehicleTable = currentExpenditurePerVehicleTableBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
-                if (context.getDebugList().contains("CURR_TOLL_TAB")) tollPerVehicleTable.print();
+                if (context.getDebugList().contains("CURR_TOLL_TAB")) tollPerVehicleTable.toStream().print(Printed.toSysOut());
 
                 /*
                   Building stream to answer account balance requests
                  */
                 KStream<Void, AccountBalanceResponse> accountBalanceResponseStream = accountBalanceResponseStreamBuilder.getStream(accountBalanceRequestStream, tollPerVehicleTable);
-                accountBalanceResponseStream.writeAsText("output/" + accountBalanceResponseStreamBuilder.getOutputTopic() + ".csv", accountBalanceResponseStreamBuilder.getKeySerde(), accountBalanceResponseStreamBuilder.getValueSerde());
+                accountBalanceResponseStream.foreach((k, v) -> {
+                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + accountBalanceResponseStreamBuilder.getOutputTopic() + ".csv", true))) {
+                        pw.println(k + "," + v);
+                    } catch (Exception e) {
+                        logger.error("Error writing account balance response", e);
+                    }
+                });
 
                 /*
                   Building stream to answer daily expenditure requests
                  */
                 KStream<Void, DailyExpenditureResponse> dailyExpenditureResponseStream = dailyExpenditureResponseStreamBuilder.getStream(dailyExpenditureRequestStream, tollHistoryTable);
-                dailyExpenditureResponseStream.writeAsText("output/" + dailyExpenditureResponseStreamBuilder.getOutputTopic() + ".csv", dailyExpenditureResponseStreamBuilder.getKeySerde(), dailyExpenditureResponseStreamBuilder.getValueSerde());
+                dailyExpenditureResponseStream.foreach((k, v) -> {
+                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + dailyExpenditureResponseStreamBuilder.getOutputTopic() + ".csv", true))) {
+                        pw.println(k + "," + v);
+                    } catch (Exception e) {
+                        logger.error("Error writing daily expenditure response", e);
+                    }
+                });
 
             }
 
 
-            KafkaStreams kafkaStreams = new KafkaStreams(builder, context.getStreamBaseConfig());
+            KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), context.getStreamBaseConfig());
             kafkaStreams.start();
 
             if (!context.getLinearRoadMode().equals("no-historical-feed")) {
@@ -248,7 +275,7 @@ public class LinearRoadKafkaBenchmarkApplication {
 
         private final Properties producerBaseConfig = new Properties();
 
-        private KStreamBuilder builder;
+        private StreamsBuilder builder;
 
         @Value("${linearroad.hisotical.data.path}")
         private String historicalFilePath;
@@ -264,9 +291,6 @@ public class LinearRoadKafkaBenchmarkApplication {
 
         @Value("${linearroad.kafka.bootstrapservers}")
         private String bootstrapServers;
-
-        @Value("${linearroad.zookeeper.server}")
-        private String zookeeperServer;
 
         @Value("${spring.profiles.active}")
         private String env;
@@ -289,22 +313,17 @@ public class LinearRoadKafkaBenchmarkApplication {
 
         @PostConstruct
         private void initializeBaseConfig() {
-            logger.debug("Configured kafka servers are {} and zookeeper {}", bootstrapServers, zookeeperServer);
+            logger.debug("Configured kafka servers are {}", bootstrapServers);
             logger.debug("Application Id is {} and running in env {}", applicationId, env);
             streamBaseConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, "linearroad-benchmark-" + this.getApplicationId());
             streamBaseConfig.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-            streamBaseConfig.put(StreamsConfig.ZOOKEEPER_CONNECT_CONFIG, zookeeperServer);
-            streamBaseConfig.put(StreamsConfig.TIMESTAMP_EXTRACTOR_CLASS_CONFIG, PositionReportHandler.TimeStampExtractor.class.getName());
+            streamBaseConfig.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, PositionReportHandler.TimeStampExtractor.class.getName());
             streamBaseConfig.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, (numberOfThreads < 1) ? Runtime.getRuntime().availableProcessors() : numberOfThreads);
-            // streamBaseConfig.put(StreamsConfig.REPLICATION_FACTOR_CONFIG, 0);
 
             producerBaseConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
             producerBaseConfig.put(ProducerConfig.ACKS_CONFIG, "all");
             producerBaseConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
-            //producerBaseConfig.put(ProducerConfig.BATCH_SIZE_CONFIG, 0); //16384);
-
-            //producerBaseConfig.put(ProducerConfig.LINGER_MS_CONFIG, 1);
             producerBaseConfig.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 33554432);
         }
 
@@ -348,11 +367,11 @@ public class LinearRoadKafkaBenchmarkApplication {
             return debugMode;
         }
 
-        public KStreamBuilder getBuilder() {
+        public StreamsBuilder getBuilder() {
             return builder;
         }
 
-        public void setBuilder(KStreamBuilder builder) {
+        public void setBuilder(StreamsBuilder builder) {
             this.builder = builder;
         }
     }

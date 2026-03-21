@@ -59,8 +59,8 @@ public class PositionReportHandler extends TupleHandler<XwaySegmentDirection, Po
         private final TupleTimestampExtractor tupleTimestampExtractor = new TupleTimestampExtractor(TupleTimestampExtractor.KeyValue.Value, 0);
 
         @Override
-        public long extract(ConsumerRecord<Object, Object> record) {
-            return tupleTimestampExtractor.extract(record);
+        public long extract(ConsumerRecord<Object, Object> record, long partitionTime) {
+            return tupleTimestampExtractor.extract(record, partitionTime);
         }
     }
 }

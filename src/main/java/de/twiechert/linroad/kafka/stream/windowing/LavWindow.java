@@ -1,9 +1,9 @@
 package de.twiechert.linroad.kafka.stream.windowing;
 
-import org.apache.kafka.streams.kstream.TimeWindows;
 import org.apache.kafka.streams.kstream.Windows;
 import org.apache.kafka.streams.kstream.internals.TimeWindow;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -19,17 +19,23 @@ public class LavWindow extends Windows<TimeWindow> {
 
     private final static long advance = 60;
 
-    private LavWindow(String name) {
-        super(name);
+    private LavWindow() {
     }
 
     /**
-     * Returns a window definition with the given name. Size and advance are fixed to the LAV use case
-     * @param name The name of the window. Must not be null or empty.
+     * Returns a window definition. Size and advance are fixed to the LAV use case.
      * @return a new window definition
      */
+    public static LavWindow of() {
+        return new LavWindow();
+    }
+
+    /**
+     * @deprecated Use {@link #of()} instead.
+     */
+    @Deprecated
     public static LavWindow of(String name) {
-        return new LavWindow(name);
+        return new LavWindow();
     }
 
 
@@ -58,15 +64,24 @@ public class LavWindow extends Windows<TimeWindow> {
     }
 
     @Override
+    public long size() {
+        return size;
+    }
+
+    @Override
+    public long gracePeriodMs() {
+        return size;
+    }
+
+    @Override
     public final boolean equals(Object o) {
         if (o == this) {
             return true;
         }
-        if (!(o instanceof TimeWindows)) {
+        if (!(o instanceof LavWindow)) {
             return false;
         }
-        TimeWindows other = (TimeWindows) o;
-        return size == other.size && advance == other.advance;
+        return true;
     }
 
     @Override

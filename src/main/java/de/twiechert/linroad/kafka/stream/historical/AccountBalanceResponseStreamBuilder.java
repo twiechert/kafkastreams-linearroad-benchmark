@@ -9,8 +9,7 @@ import de.twiechert.linroad.kafka.model.historical.ExpenditureAt;
 import de.twiechert.linroad.kafka.stream.StreamBuilder;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -36,7 +35,7 @@ public class AccountBalanceResponseStreamBuilder extends StreamBuilder<Void, Acc
           Change the key of the request stream such that we can aggregate on a per vehicle basis.
          */
         KStream<Integer, AccountBalanceRequest> accountBalanceRequestsPerVehicle = accountBalanceRequestStream.map((k, v) -> new KeyValue<>(k.getVehicleID(), k))
-                .through(new Serdes.IntegerSerde(), new DefaultSerde<>(), context.topic("ACC_BALANCE_PER_VEHICLE"));
+                .repartition(Repartitioned.with(new Serdes.IntegerSerde(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_VEHICLE")));
 
 
         return accountBalanceRequestsPerVehicle.leftJoin(currentTollTable,

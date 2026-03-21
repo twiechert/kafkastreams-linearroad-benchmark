@@ -7,8 +7,7 @@ import de.twiechert.linroad.kafka.model.TimedOnMinute;
 import de.twiechert.linroad.kafka.model.XwaySegmentDirection;
 import de.twiechert.linroad.kafka.stream.processor.OnMinuteChangeEmitter;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Pair;
 import org.javatuples.Quintet;
 import org.javatuples.Triplet;
@@ -17,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -38,7 +38,7 @@ public class AccidentDetectionStreamBuilder {
 
     public KStream<XwaySegmentDirection, Long> getStream(KStream<XwaySegmentDirection, PositionReport> positionReportStream) {
         logger.debug("Building stream to identify accidents");
-        TimeWindows accDetectionWindow = TimeWindows.of(context.topic("ACC_DET_WINDOW"), 4 * 30).advanceBy(30);
+        TimeWindows accDetectionWindow = TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(4 * 30)).advanceBy(Duration.ofSeconds(30));
 
         // an accident at minute m expressway x, segment s, direction d will be mapped to all segments downstream 0..4
         //detect an accident on a given segment whenever two or more vehicles are stopped in that segment at the same lane and position
@@ -50,7 +50,9 @@ public class AccidentDetectionStreamBuilder {
                 new Pair<>(value.getTime(), value.getVehicleId())))
                 // current time to use | if more than one vehicle in window | current count of position reports in window
 
-                .aggregateByKey(() -> new AccidentDetectionValIntermediate(0L, new HashMap<>()),
+                .groupByKey(Grouped.with(new DefaultSerde<>(), new DefaultSerde<>()))
+                .windowedBy(accDetectionWindow)
+                .aggregate(() -> new AccidentDetectionValIntermediate(0L, new HashMap<>()),
                         (key, value, agg) -> {
                             if (!agg.getVehicleMap().containsKey(value.getValue1())) {
                                 agg.getVehicleMap().put(value.getValue1(), 1);
@@ -60,7 +62,7 @@ public class AccidentDetectionStreamBuilder {
                             // the latest timestamp is updated again, which is required by the OnMinuteChangeEmitter to work properly
                             return new AccidentDetectionValIntermediate(Util.minuteOfReport(value.getValue0()), agg.getVehicleMap());
                         }
-                        , accDetectionWindow, new DefaultSerde<>(), new DefaultSerde<>())
+                        , Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream()
                 .map((k, v) -> new KeyValue<>(k.key(), v.setWindowEndMinute(Util.minuteOfReport(k.window().end()))))
                   /*
@@ -68,7 +70,7 @@ public class AccidentDetectionStreamBuilder {
                  */
                 .filter((k, v) -> v.getVehicleMap().entrySet().stream().filter(p -> p.getValue() >= 4).count() >= 2);
 
-        return OnMinuteChangeEmitter.getForWindowed(context.getBuilder(), accDetection, new DefaultSerde<>(), new DefaultSerde<>(), "latest-acc")
+        return OnMinuteChangeEmitter.getForWindowed(accDetection, new DefaultSerde<>(), new DefaultSerde<>(), "latest-acc")
 
 
 
@@ -77,7 +79,7 @@ public class AccidentDetectionStreamBuilder {
                         // creates range 0,1,2,3,4
                         IntStream.range(0, 5).mapToObj(in -> new KeyValue<>(new XwaySegmentDirection(key.getValue0(), ((key.getValue3() - in) < 0) ? 0 : key.getValue3() - in, key.getValue2()),
                                 value0.getWindowEndMinute())).collect(Collectors.toList()))
-                .through(new DefaultSerde<>(), new DefaultSerde<>(), context.topic("ACC_DETECTION"));
+                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DETECTION")));
 
 
     }

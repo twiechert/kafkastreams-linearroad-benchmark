@@ -5,13 +5,14 @@ import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.core.serde.DefaultSerde;
 import de.twiechert.linroad.kafka.model.*;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.JoinWindows;
-import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.time.Duration;
 
 /**
  * This class notifies drivers about occurred accidents if they are close-by according to the LR requirements.
@@ -46,7 +47,7 @@ public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, Accid
           We use the consecutive position report stream, that only emits the first position report in a segment per vehicle.
          */
         KStream<XwaySegmentDirection, AccidentNotificationIntermediate> segmentCrossingPositionReportsForAccNotification = segmentCrossingPositionReports.map((k, v) -> new KeyValue<>(new XwaySegmentDirection(k.getXway(), v.getSegment(), k.getDir()), AccidentNotificationIntermediate.fromPosReport(v)))
-                .through(new DefaultSerde<>(), new DefaultSerde<>(), context.topic("ACC_DET_POS"));
+                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DET_POS")));
         /*
           The trigger for an accident notification is a position report
           that identifies a vehicle entering a segment 0 to 4 segments upstream of some accident location,
@@ -59,8 +60,9 @@ public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, Accid
          * Thus, a position report at minute $m$ will not trigger an accident notification of an accident occurred at the same minute.
          * Technically this is approached by modifying the event time of the position report source stream.
          */
-        return  accidentReports.join(segmentCrossingPositionReportsForAccNotification, (value1, value2) -> value2, JoinWindows.of(context.topic("ACC_NOT_WINDOW")),
-                        new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>())
+        return  accidentReports.join(segmentCrossingPositionReportsForAccNotification, (value1, value2) -> value2,
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 // no notification required if exit-lane
                 .filter((k,v) -> v.getLane() != 4)
                 .map((k, v) -> new KeyValue<>(new Void(), new AccidentNotification(v.getPositionRepRequestTimeInSec(), LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds(), k.getSeg())));
