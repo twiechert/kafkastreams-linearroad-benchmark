@@ -33,10 +33,10 @@ test-all:
 
 # Start local Kafka (single-node KRaft via Docker)
 kafka-up partitions="12":
-  cd infra/local && KAFKA_NUM_PARTITIONS={{partitions}} docker compose up -d
+  cd infra/local && KAFKA_NUM_PARTITIONS={{partitions}} docker-compose up -d
   @echo "Waiting for Kafka..."
   @for i in $(seq 1 30); do \
-    docker compose -f infra/local/docker-compose.yml exec -T kafka \
+    docker-compose -f infra/local/docker-compose.yml exec -T kafka \
       kafka-topics --bootstrap-server localhost:9092 --list &>/dev/null && break; \
     sleep 2; \
   done
@@ -44,13 +44,13 @@ kafka-up partitions="12":
 
 # Stop local Kafka
 kafka-down:
-  cd infra/local && docker compose down -v
+  cd infra/local && docker-compose down -v
 
 # Pre-create topics with correct partition count
 topics-create partitions="12": (kafka-up partitions)
   #!/usr/bin/env bash
-  for TOPIC in POS BALANCE DAILYEXP TOLL_HIST_TABLE; do
-    docker compose -f infra/local/docker-compose.yml exec -T kafka \
+  for TOPIC in POS BALANCE DAILYEXP TOLL_HIST_TABLE TOLL_HISTORY TRAVELEST; do
+    docker-compose -f infra/local/docker-compose.yml exec -T kafka \
       kafka-topics --bootstrap-server localhost:9092 \
       --create --topic "$TOPIC" --partitions {{partitions}} \
       --replication-factor 1 --if-not-exists 2>/dev/null
@@ -59,12 +59,13 @@ topics-create partitions="12": (kafka-up partitions)
 
 # List all Kafka topics
 topics-list:
-  docker compose -f infra/local/docker-compose.yml exec -T kafka \
+  docker-compose -f infra/local/docker-compose.yml exec -T kafka \
     kafka-topics --bootstrap-server localhost:9092 --list --exclude-internal
 
 # Generate test data
 generate xways="1" duration="3" vehicles="20":
   #!/usr/bin/env bash
+  mvn test-compile -B -q
   mkdir -p benchmark-data
   java -cp "target/kafka-linearroad-1.0-SNAPSHOT.jar:target/test-classes" \
     de.twiechert.linroad.kafka.benchmark.LinearRoadDataGenerator \
@@ -85,24 +86,26 @@ local xways="1" duration="3" vehicles="20" threads="4": build
   echo "============================================"
 
   # Start Kafka + create topics
-  just kafka-up $PARTITIONS
-  just topics-create $PARTITIONS
+  just kafka-up "$PARTITIONS"
+  just topics-create "$PARTITIONS"
 
   # Generate data
-  just generate {{xways}} {{duration}} {{vehicles}}
+  just generate "{{xways}}" "{{duration}}" "{{vehicles}}"
 
   # Run the streaming application
   mkdir -p output
   echo ""
   echo "Starting Kafka Streams ({{threads}} threads)..."
-  java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar \
-    --linearroad.data.path=benchmark-data/benchmark.dat \
-    --linearroad.hisotical.data.path=benchmark-data/benchmark.dat.tolls.dat \
-    --linearroad.kafka.bootstrapservers=localhost:9092 \
-    --linearroad.mode=all \
-    --linearroad.mode.debug=false \
-    --linearroad.kafka.num_stream_threads={{threads}} \
-    --spring.profiles.active=dev
+  printf '%s\n' \
+    "linearroad.data.path=benchmark-data/benchmark.dat" \
+    "linearroad.hisotical.data.path=benchmark-data/benchmark.dat.tolls.dat" \
+    "linearroad.kafka.bootstrapservers=localhost:9092" \
+    "linearroad.mode=all" \
+    "linearroad.mode.debug=" \
+    "linearroad.kafka.num_stream_threads={{threads}}" \
+    "linearroad.feeding.realtime=true" \
+    > benchmark-data/benchmark.properties
+  java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar benchmark-data/benchmark.properties
 
 # Run the convenience local script (alternative)
 local-script *ARGS:

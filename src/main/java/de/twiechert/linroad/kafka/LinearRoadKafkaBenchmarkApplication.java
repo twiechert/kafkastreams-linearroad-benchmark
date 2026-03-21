@@ -187,6 +187,14 @@ public class LinearRoadKafkaBenchmarkApplication {
             }, 5000, 5000);
         }
 
+        // Wait for Kafka Streams to be ready before feeding
+        logger.info("Waiting for Kafka Streams to reach RUNNING state...");
+        for (int i = 0; i < 60; i++) {
+            if (kafkaStreams.state() == KafkaStreams.State.RUNNING) break;
+            Thread.sleep(1000);
+        }
+        logger.info("Kafka Streams state: {}", kafkaStreams.state());
+
         if (!context.getLinearRoadMode().equals("no-historical-feed")) {
             logger.debug("Start feeding with historical data");
             historicalDataFeeder.startFeeding();
@@ -195,8 +203,8 @@ public class LinearRoadKafkaBenchmarkApplication {
         if (!context.getLinearRoadMode().equals("no-benchmark")) {
             logger.debug("Start feeding of tuples");
             positionReporter.startFeeding();
-            logger.debug("Feeding Finished.");
-            Thread.sleep(10_000);
+            logger.debug("Feeding Finished. Waiting for processing to complete...");
+            Thread.sleep(30_000);
         }
 
         // Generate and print benchmark report
@@ -212,6 +220,8 @@ public class LinearRoadKafkaBenchmarkApplication {
             report.writeCsv(new File(outputDir, "throughput-timeline.csv"));
             logger.info("Throughput timeline written to output/throughput-timeline.csv");
         }
+
+        kafkaStreams.close();
     }
 
     public static class Context {
@@ -228,17 +238,20 @@ public class LinearRoadKafkaBenchmarkApplication {
         private final String bootstrapServers;
         private final String linearRoadMode;
         private final int numberOfThreads;
+        private final boolean realtimeFeeding;
         private final String applicationId;
         private static DateTime benchmarkStartedAt = DateTime.now();
 
         public Context(String historicalFilePath, String filePath, List<String> debugMode,
-                       String bootstrapServers, String linearRoadMode, int numberOfThreads) {
+                       String bootstrapServers, String linearRoadMode, int numberOfThreads,
+                       boolean realtimeFeeding) {
             this.historicalFilePath = historicalFilePath;
             this.filePath = filePath;
             this.debugMode = debugMode;
             this.bootstrapServers = bootstrapServers;
             this.linearRoadMode = linearRoadMode;
             this.numberOfThreads = numberOfThreads;
+            this.realtimeFeeding = realtimeFeeding;
             this.applicationId = generator.generateByRegex("[0-9a-z]{3}");
             initializeBaseConfig();
         }
@@ -274,7 +287,8 @@ public class LinearRoadKafkaBenchmarkApplication {
                     debugList,
                     props.getProperty("linearroad.kafka.bootstrapservers", "localhost:9092"),
                     props.getProperty("linearroad.mode", "all"),
-                    Integer.parseInt(props.getProperty("linearroad.kafka.num_stream_threads", "0"))
+                    Integer.parseInt(props.getProperty("linearroad.kafka.num_stream_threads", "0")),
+                    Boolean.parseBoolean(props.getProperty("linearroad.feeding.realtime", "false"))
             );
         }
 
@@ -285,6 +299,8 @@ public class LinearRoadKafkaBenchmarkApplication {
             streamBaseConfig.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
             streamBaseConfig.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, PositionReportHandler.TimeStampExtractor.class.getName());
             streamBaseConfig.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, (numberOfThreads < 1) ? Runtime.getRuntime().availableProcessors() : numberOfThreads);
+            streamBaseConfig.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, de.twiechert.linroad.kafka.core.serde.DefaultSerde.class.getName());
+            streamBaseConfig.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, de.twiechert.linroad.kafka.core.serde.DefaultSerde.class.getName());
 
             producerBaseConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
             producerBaseConfig.put(ProducerConfig.ACKS_CONFIG, "all");
@@ -312,6 +328,7 @@ public class LinearRoadKafkaBenchmarkApplication {
         public List<String> getDebugList() { return debugMode; }
         public StreamsBuilder getBuilder() { return builder; }
         public void setBuilder(StreamsBuilder builder) { this.builder = builder; }
+        public boolean isRealtimeFeeding() { return realtimeFeeding; }
         public BenchmarkMetrics getMetrics() { return metrics; }
         public void setMetrics(BenchmarkMetrics metrics) { this.metrics = metrics; }
     }
