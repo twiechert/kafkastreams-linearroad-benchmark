@@ -144,6 +144,69 @@ infra-status:
   cd infra/terraform && terraform output
 
 # ============================================================
+# Results & Reporting
+# ============================================================
+
+# Show the last benchmark report (from output/throughput-timeline.csv)
+report:
+  #!/usr/bin/env bash
+  if [ ! -f output/throughput-timeline.csv ]; then
+    echo "No benchmark results found. Run 'just local' first."
+    exit 1
+  fi
+  echo ""
+  echo "╔══════════════════════════════════════════════════╗"
+  echo "║        THROUGHPUT TIMELINE                       ║"
+  echo "╠══════════════════════════════════════════════════╣"
+  echo "║ Time(s)  │ Ingested    │ Processed   │ Rate     ║"
+  echo "╠══════════════════════════════════════════════════╣"
+  PREV_PROC=0
+  PREV_TIME=0
+  tail -n +2 output/throughput-timeline.csv | while IFS=, read -r elapsed ingested processed; do
+    RATE=0
+    if [ "$PREV_TIME" -gt 0 ] 2>/dev/null; then
+      DT=$((elapsed - PREV_TIME))
+      DP=$((processed - PREV_PROC))
+      if [ "$DT" -gt 0 ]; then
+        RATE=$((DP * 1000 / DT))
+      fi
+    fi
+    printf "║ %7.1f  │ %10s  │ %10s  │ %6s/s ║\n" \
+      "$(echo "scale=1; $elapsed/1000" | bc)" \
+      "$ingested" "$processed" "$RATE"
+    PREV_PROC=$processed
+    PREV_TIME=$elapsed
+  done
+  echo "╚══════════════════════════════════════════════════╝"
+
+# Render a throughput chart from the timeline CSV (requires gnuplot)
+chart:
+  #!/usr/bin/env bash
+  if [ ! -f output/throughput-timeline.csv ]; then
+    echo "No benchmark results found. Run 'just local' first."
+    exit 1
+  fi
+  if ! command -v gnuplot &>/dev/null; then
+    echo "gnuplot not found. Install with: brew install gnuplot"
+    echo "Falling back to ASCII chart..."
+    just report
+    exit 0
+  fi
+  gnuplot <<'GNUPLOT'
+  set terminal dumb 120 30
+  set datafile separator ","
+  set xlabel "Time (s)"
+  set ylabel "Records"
+  set title "Linear Road Benchmark Throughput"
+  set key top left
+  plot "output/throughput-timeline.csv" using ($1/1000):2 with lines title "Ingested", \
+       "" using ($1/1000):3 with lines title "Processed"
+  GNUPLOT
+  echo ""
+  echo "For a PNG chart:"
+  echo "  gnuplot -e 'set terminal png size 1200,600; set output \"output/chart.png\"; set datafile separator \",\"; set xlabel \"Time (s)\"; set ylabel \"Records\"; plot \"output/throughput-timeline.csv\" using (\$1/1000):2 with lines title \"Ingested\", \"\" using (\$1/1000):3 with lines title \"Processed\"'"
+
+# ============================================================
 # Utilities
 # ============================================================
 

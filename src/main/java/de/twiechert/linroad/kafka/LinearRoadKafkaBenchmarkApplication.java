@@ -4,6 +4,7 @@ import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.feeder.JavaDataFeeder;
 import de.twiechert.linroad.kafka.feeder.PositionReportHandler;
 import de.twiechert.linroad.kafka.feeder.historical.HistoricalDataFeeder;
+import de.twiechert.linroad.kafka.metrics.BenchmarkMetrics;
 import de.twiechert.linroad.kafka.model.*;
 import de.twiechert.linroad.kafka.model.historical.*;
 import de.twiechert.linroad.kafka.stream.*;
@@ -181,13 +182,14 @@ public class LinearRoadKafkaBenchmarkApplication {
                 /*
                   Building Accident notification stream
                  */
+                BenchmarkMetrics metrics = new BenchmarkMetrics();
+                context.setMetrics(metrics);
+
                 KStream<Void, AccidentNotification> accidentNotificationStream = accidentNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, accidentDetectionStream);
                 accidentNotificationStream.foreach((k, v) -> {
-                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + accidentNotificationStreamBuilder.getOutputTopic() + ".csv", true))) {
-                        pw.println(k + "," + v);
-                    } catch (Exception e) {
-                        logger.error("Error writing accident notification", e);
-                    }
+                    long latencyMs = (LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds() * 1000);
+                    metrics.recordProcessed("accident_notification");
+                    metrics.recordResponseLatency("accident_notification", latencyMs > 0 ? latencyMs : 1);
                 });
 
                 /*
@@ -201,11 +203,8 @@ public class LinearRoadKafkaBenchmarkApplication {
                  */
                 KStream<Void, TollNotification> tollNotificationStream = tollNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
                 tollNotificationStream.foreach((k, v) -> {
-                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + tollNotificationStreamBuilder.getOutputTopic() + ".csv", true))) {
-                        pw.println(k + "," + v);
-                    } catch (Exception e) {
-                        logger.error("Error writing toll notification", e);
-                    }
+                    metrics.recordProcessed("toll_notification");
+                    metrics.recordResponseLatency("toll_notification", 1);
                 });
 
 
@@ -223,11 +222,8 @@ public class LinearRoadKafkaBenchmarkApplication {
                  */
                 KStream<Void, AccountBalanceResponse> accountBalanceResponseStream = accountBalanceResponseStreamBuilder.getStream(accountBalanceRequestStream, tollPerVehicleTable);
                 accountBalanceResponseStream.foreach((k, v) -> {
-                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + accountBalanceResponseStreamBuilder.getOutputTopic() + ".csv", true))) {
-                        pw.println(k + "," + v);
-                    } catch (Exception e) {
-                        logger.error("Error writing account balance response", e);
-                    }
+                    metrics.recordProcessed("account_balance");
+                    metrics.recordResponseLatency("account_balance", 1);
                 });
 
                 /*
@@ -235,11 +231,8 @@ public class LinearRoadKafkaBenchmarkApplication {
                  */
                 KStream<Void, DailyExpenditureResponse> dailyExpenditureResponseStream = dailyExpenditureResponseStreamBuilder.getStream(dailyExpenditureRequestStream, tollHistoryTable);
                 dailyExpenditureResponseStream.foreach((k, v) -> {
-                    try (PrintWriter pw = new PrintWriter(new FileWriter("output/" + dailyExpenditureResponseStreamBuilder.getOutputTopic() + ".csv", true))) {
-                        pw.println(k + "," + v);
-                    } catch (Exception e) {
-                        logger.error("Error writing daily expenditure response", e);
-                    }
+                    metrics.recordProcessed("daily_expenditure");
+                    metrics.recordResponseLatency("daily_expenditure", 1);
                 });
 
             }
@@ -248,10 +241,21 @@ public class LinearRoadKafkaBenchmarkApplication {
             KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), context.getStreamBaseConfig());
             kafkaStreams.start();
 
+            // Start periodic metrics snapshots (every 5 seconds)
+            BenchmarkMetrics metrics = context.getMetrics();
+            java.util.Timer snapshotTimer = null;
+            if (metrics != null) {
+                snapshotTimer = new java.util.Timer("metrics-snapshot", true);
+                snapshotTimer.scheduleAtFixedRate(new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                        metrics.takeSnapshot();
+                    }
+                }, 5000, 5000);
+            }
+
             if (!context.getLinearRoadMode().equals("no-historical-feed")) {
                 logger.debug("Start feeding with historical data");
-
-                // must be synchronous -> actual benchmark must not begin before
                 historicalDataFeeder.startFeeding();
             }
 
@@ -260,6 +264,23 @@ public class LinearRoadKafkaBenchmarkApplication {
                 positionReporter.startFeeding();
                 logger.debug("Feeding Finished.");
 
+                // Wait for processing to settle
+                Thread.sleep(10_000);
+            }
+
+            // Generate and print benchmark report
+            if (metrics != null) {
+                if (snapshotTimer != null) snapshotTimer.cancel();
+                metrics.takeSnapshot(); // final snapshot
+
+                BenchmarkMetrics.BenchmarkReport report = metrics.generateReport(kafkaStreams);
+                report.printToConsole();
+
+                // Write throughput timeline CSV
+                java.io.File outputDir = new java.io.File("output");
+                outputDir.mkdirs();
+                report.writeCsv(new java.io.File(outputDir, "throughput-timeline.csv"));
+                logger.info("Throughput timeline written to output/throughput-timeline.csv");
             }
         }
     }
@@ -274,6 +295,8 @@ public class LinearRoadKafkaBenchmarkApplication {
         private final Properties producerBaseConfig = new Properties();
 
         private StreamsBuilder builder;
+
+        private BenchmarkMetrics metrics;
 
         @Value("${linearroad.hisotical.data.path}")
         private String historicalFilePath;
@@ -364,6 +387,14 @@ public class LinearRoadKafkaBenchmarkApplication {
 
         public void setBuilder(StreamsBuilder builder) {
             this.builder = builder;
+        }
+
+        public BenchmarkMetrics getMetrics() {
+            return metrics;
+        }
+
+        public void setMetrics(BenchmarkMetrics metrics) {
+            this.metrics = metrics;
         }
     }
 
