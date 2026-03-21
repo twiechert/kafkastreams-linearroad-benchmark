@@ -49,10 +49,10 @@ public class CurrentExpenditurePerVehicleTableBuilder {
                 .map((k, v) -> new KeyValue<>(new XwaySegmentDirection(k.getXway(), v.getSegment() - 1, k.getDir()),
                         new TollNotificationStreamBuilder.ConsecutivePosReportIntermediate(Util.minuteOfReport(v.getPredecessorTime()), v.getTime(), k.getVehicleId())))
 
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<XwaySegmentDirection, TollNotificationStreamBuilder.ConsecutivePosReportIntermediate>()).withName("SEG_CROSSINGS_SEG_SHIFTED"))
+                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName("SEG_CROSSINGS_SEG_SHIFTED"))
                 .join(currentTollStream, (psRep, currToll) -> new CurrentExpenditureIntermediate(psRep.getVehicleId(), currToll.getToll()),
 
-                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 .map((k, v) -> new KeyValue<>(v.getVehicleId(), v.getToll()))
                 .groupByKey(Grouped.with(new Serdes.IntegerSerde(), new DefaultSerde<>()))

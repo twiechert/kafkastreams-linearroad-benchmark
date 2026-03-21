@@ -65,7 +65,7 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
 
         return segmentCrossingPerXwaySegmentDir
                 .join(currentTollStream, (psRep, currToll) -> new TollNotification(psRep.getVehicleId(), psRep.getTime(), LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds(), currToll.getVelocity(), currToll.getToll()),
-                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 .selectKey((k, v) -> new Void());
     }

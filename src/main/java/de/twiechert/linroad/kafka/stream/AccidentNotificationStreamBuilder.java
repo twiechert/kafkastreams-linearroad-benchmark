@@ -61,7 +61,7 @@ public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, Accid
          * Technically this is approached by modifying the event time of the position report source stream.
          */
         return  accidentReports.join(segmentCrossingPositionReportsForAccNotification, (value1, value2) -> value2,
-                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 // no notification required if exit-lane
                 .filter((k,v) -> v.getLane() != 4)

@@ -42,11 +42,11 @@ public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection
                 .join(latestAverageVelocityStream
                                 .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("NOV_TOLL"))),
                         (value1, value2) -> new CurrentTollIntermediate(value2.getMinute(), value2.getAverageSpeed(), value1.getNumberOfVehicles()),
-                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 .leftJoin(accidentDetectionStream,
                         (value1, value2) -> value1.setNoAccident(value2 == null),
-                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(30)),
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new Serdes.LongSerde()))
                 .filter((k, v) -> v.isTollApplicable())
                 // otherwise calculate toll
