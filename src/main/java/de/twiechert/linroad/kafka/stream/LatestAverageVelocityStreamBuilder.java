@@ -15,19 +15,18 @@ import org.javatuples.Pair;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 /**
  * This class builds the stream of latest average velocities keyed by (expressway, segment, direction).
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class LatestAverageVelocityStreamBuilder {
 
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public LatestAverageVelocityStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(LatestAverageVelocityStreamBuilder.class);

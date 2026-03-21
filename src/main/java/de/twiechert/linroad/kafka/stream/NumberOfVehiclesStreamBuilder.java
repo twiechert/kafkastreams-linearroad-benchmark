@@ -14,9 +14,6 @@ import org.apache.kafka.streams.kstream.TimeWindows;
 import org.javatuples.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.util.HashSet;
 
@@ -26,15 +23,17 @@ import java.util.HashSet;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class NumberOfVehiclesStreamBuilder {
 
 
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(NumberOfVehiclesStreamBuilder.class);
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public NumberOfVehiclesStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     public KStream<XwaySegmentDirection, NumberOfVehicles> getStream(KStream<XwaySegmentDirection, PositionReport> positionReportStream) {
         logger.debug("Building stream to identify number of vehicles at expressway, segment and direction per minute.");

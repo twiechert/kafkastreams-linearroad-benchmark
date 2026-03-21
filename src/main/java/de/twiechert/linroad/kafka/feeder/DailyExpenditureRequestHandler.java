@@ -4,9 +4,6 @@ import de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication;
 import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.model.historical.DailyExpenditureRequest;
 import org.apache.kafka.common.serialization.Serializer;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import static de.twiechert.linroad.kafka.stream.Util.pInt;
 import static de.twiechert.linroad.kafka.stream.Util.pLng;
 
@@ -16,12 +13,10 @@ import static de.twiechert.linroad.kafka.stream.Util.pLng;
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  *
  */
-@Component
 public class DailyExpenditureRequestHandler extends TupleHandler<DailyExpenditureRequest, Void> {
 
     public static final String TOPIC = "DAILYEXP";
 
-    @Autowired
     public DailyExpenditureRequestHandler(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context, 3);
     }

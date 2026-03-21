@@ -60,15 +60,18 @@ echo "Starting Kafka Streams worker..."
 echo "Bootstrap: $BOOTSTRAP"
 echo "Threads: ${num_stream_threads}"
 
+cat > /home/ubuntu/worker.properties <<PROPS
+linearroad.data.path=/dev/null
+linearroad.hisotical.data.path=/dev/null
+linearroad.kafka.bootstrapservers=$BOOTSTRAP
+linearroad.mode=no-benchmark
+linearroad.mode.debug=false
+linearroad.kafka.num_stream_threads=${num_stream_threads}
+PROPS
+
 java -cp "target/kafka-linearroad-1.0-SNAPSHOT.jar:aws-msk-iam-auth-2.0.3-all.jar" \
   de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication \
-  --linearroad.data.path=/dev/null \
-  --linearroad.hisotical.data.path=/dev/null \
-  --linearroad.kafka.bootstrapservers="$BOOTSTRAP" \
-  --linearroad.mode=no-benchmark \
-  --linearroad.mode.debug=false \
-  --linearroad.kafka.num_stream_threads=${num_stream_threads} \
-  --spring.profiles.active=cluster
+  /home/ubuntu/worker.properties
 RUNEOF
 
 chmod +x /home/ubuntu/run-worker.sh

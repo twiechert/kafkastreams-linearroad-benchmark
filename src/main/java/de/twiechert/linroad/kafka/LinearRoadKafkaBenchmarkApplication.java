@@ -1,9 +1,9 @@
 package de.twiechert.linroad.kafka;
 
 import de.twiechert.linroad.kafka.core.Void;
-import de.twiechert.linroad.kafka.feeder.JavaDataFeeder;
-import de.twiechert.linroad.kafka.feeder.PositionReportHandler;
+import de.twiechert.linroad.kafka.feeder.*;
 import de.twiechert.linroad.kafka.feeder.historical.HistoricalDataFeeder;
+import de.twiechert.linroad.kafka.feeder.historical.TollHistoryRequestHandler;
 import de.twiechert.linroad.kafka.metrics.BenchmarkMetrics;
 import de.twiechert.linroad.kafka.model.*;
 import de.twiechert.linroad.kafka.model.historical.*;
@@ -26,377 +26,293 @@ import org.joda.time.DateTime;
 import org.joda.time.Seconds;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PostConstruct;
-import java.io.FileWriter;
-import java.io.PrintWriter;
+import java.io.*;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@SpringBootApplication
-@EnableAutoConfiguration
-@EnableAsync
-@Configuration
 public class LinearRoadKafkaBenchmarkApplication {
 
-    private final static Logger logger = (Logger) LoggerFactory
-            .getLogger(LinearRoadKafkaBenchmarkApplication.class);
+    private static final Logger logger = LoggerFactory.getLogger(LinearRoadKafkaBenchmarkApplication.class);
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+        // Load configuration
+        String configFile = args.length > 0 ? args[0] : "application.properties";
+        Context context = Context.fromProperties(configFile);
 
-        SpringApplication.run(LinearRoadKafkaBenchmarkApplication.class, args);
+        // Build feeders
+        PositionReportHandler positionReportHandler = new PositionReportHandler(context);
+        AccountBalanceRequestHandler accountBalanceRequestHandler = new AccountBalanceRequestHandler(context);
+        DailyExpenditureRequestHandler dailyExpenditureRequestHandler = new DailyExpenditureRequestHandler(context);
+        TollHistoryRequestHandler tollHistoryRequestHandler = new TollHistoryRequestHandler(context);
+        JavaDataFeeder positionReporter = new JavaDataFeeder(context, positionReportHandler, dailyExpenditureRequestHandler, accountBalanceRequestHandler);
+        HistoricalDataFeeder historicalDataFeeder = new HistoricalDataFeeder(context, tollHistoryRequestHandler);
+
+        // Build stream builders
+        PositionReportStreamBuilder positionReportStreamBuilder = new PositionReportStreamBuilder(context);
+        SegmentCrossingPositionReportBuilder segmentCrossingPositionReportBuilder = new SegmentCrossingPositionReportBuilder(context);
+        NumberOfVehiclesStreamBuilder numberOfVehiclesStreamBuilder = new NumberOfVehiclesStreamBuilder(context);
+        LatestAverageVelocityStreamBuilder latestAverageVelocityStreamBuilder = new LatestAverageVelocityStreamBuilder(context);
+        AccidentDetectionStreamBuilder accidentDetectionStreamBuilder = new AccidentDetectionStreamBuilder(context);
+        AccidentNotificationStreamBuilder accidentNotificationStreamBuilder = new AccidentNotificationStreamBuilder(context);
+        CurrentTollStreamBuilder currentTollStreamBuilder = new CurrentTollStreamBuilder(context);
+        TollNotificationStreamBuilder tollNotificationStreamBuilder = new TollNotificationStreamBuilder(context);
+        TollHistoryTableBuilder tollHistoryTableBuilder = new TollHistoryTableBuilder(context);
+        CurrentExpenditurePerVehicleTableBuilder currentExpenditurePerVehicleTableBuilder = new CurrentExpenditurePerVehicleTableBuilder(context);
+        AccountBalanceRequestStreamBuilder accountBalanceStreamBuilder = new AccountBalanceRequestStreamBuilder(context);
+        AccountBalanceResponseStreamBuilder accountBalanceResponseStreamBuilder = new AccountBalanceResponseStreamBuilder(context);
+        DailyExpenditureRequestStreamBuilder dailyExpenditureRequestStreamBuilder = new DailyExpenditureRequestStreamBuilder(context);
+        DailyExpenditureResponseStreamBuilder dailyExpenditureResponseStreamBuilder = new DailyExpenditureResponseStreamBuilder(context);
+
+        // Build topology
+        run(context, historicalDataFeeder, positionReporter,
+                positionReportStreamBuilder, segmentCrossingPositionReportBuilder,
+                numberOfVehiclesStreamBuilder, latestAverageVelocityStreamBuilder,
+                accidentDetectionStreamBuilder, accidentNotificationStreamBuilder,
+                currentTollStreamBuilder, tollNotificationStreamBuilder,
+                tollHistoryTableBuilder, currentExpenditurePerVehicleTableBuilder,
+                accountBalanceStreamBuilder, accountBalanceResponseStreamBuilder,
+                dailyExpenditureRequestStreamBuilder, dailyExpenditureResponseStreamBuilder);
     }
 
-    @Component
-    public static class BenchmarkRunner implements CommandLineRunner {
+    static void run(Context context,
+                    HistoricalDataFeeder historicalDataFeeder,
+                    JavaDataFeeder positionReporter,
+                    PositionReportStreamBuilder positionReportStreamBuilder,
+                    SegmentCrossingPositionReportBuilder segmentCrossingPositionReportBuilder,
+                    NumberOfVehiclesStreamBuilder numberOfVehiclesStreamBuilder,
+                    LatestAverageVelocityStreamBuilder latestAverageVelocityStreamBuilder,
+                    AccidentDetectionStreamBuilder accidentDetectionStreamBuilder,
+                    AccidentNotificationStreamBuilder accidentNotificationStreamBuilder,
+                    CurrentTollStreamBuilder currentTollStreamBuilder,
+                    TollNotificationStreamBuilder tollNotificationStreamBuilder,
+                    TollHistoryTableBuilder tollHistoryTableBuilder,
+                    CurrentExpenditurePerVehicleTableBuilder currentExpenditurePerVehicleTableBuilder,
+                    AccountBalanceRequestStreamBuilder accountBalanceStreamBuilder,
+                    AccountBalanceResponseStreamBuilder accountBalanceResponseStreamBuilder,
+                    DailyExpenditureRequestStreamBuilder dailyExpenditureRequestStreamBuilder,
+                    DailyExpenditureResponseStreamBuilder dailyExpenditureResponseStreamBuilder) throws Exception {
 
-        @Autowired
-        private Context context;
+        logger.debug("Using mode {}", context.getLinearRoadMode());
+        StreamsBuilder builder = new StreamsBuilder();
+        context.setBuilder(builder);
+        KTable<XwayVehicleIdDay, Double> tollHistoryTable = null;
 
-        @Autowired
-        private HistoricalDataFeeder historicalDataFeeder;
+        // historical info feeding
+        if (!context.getLinearRoadMode().equals("no-historical-feed")) {
+            tollHistoryTable = tollHistoryTableBuilder.getTable(builder);
+            if (context.getDebugList().contains("TOLL_HIST")) tollHistoryTable.toStream().print(Printed.toSysOut());
+        }
 
-        @Autowired
-        private JavaDataFeeder positionReporter;
+        // executing the actual benchmark
+        if (!context.getLinearRoadMode().equals("no-benchmark")) {
+            logger.debug("Starting benchmark");
+            tollHistoryTable = (tollHistoryTable == null) ? tollHistoryTableBuilder.getExistingTable(builder) : tollHistoryTable;
 
-        @Autowired
-        private LatestAverageVelocityStreamBuilder latestAverageVelocityStreamBuilder;
+            KStream<XwaySegmentDirection, PositionReport> positionReportStream = positionReportStreamBuilder.getStream(builder);
+            if (context.getDebugList().contains("POS_REP")) positionReportStream.print(Printed.toSysOut());
 
-        @Autowired
-        private AccidentDetectionStreamBuilder accidentDetectionStreamBuilder;
+            KStream<VehicleIdXwayDirection, SegmentCrossing> segmentCrossingPositionReportStream = segmentCrossingPositionReportBuilder.getStream(positionReportStream);
+            if (context.getDebugList().contains("POS_SEG")) segmentCrossingPositionReportStream.print(Printed.toSysOut());
 
-        @Autowired
-        private AccidentNotificationStreamBuilder accidentNotificationStreamBuilder;
+            KStream<AccountBalanceRequest, Void> accountBalanceRequestStream = accountBalanceStreamBuilder.getStream(builder);
+            if (context.getDebugList().contains("ACCB_REQ")) accountBalanceRequestStream.print(Printed.toSysOut());
 
-        @Autowired
-        private SegmentCrossingPositionReportBuilder segmentCrossingPositionReportBuilder;
+            KStream<DailyExpenditureRequest, Void> dailyExpenditureRequestStream = dailyExpenditureRequestStreamBuilder.getStream(builder);
+            if (context.getDebugList().contains("DEXP_REQ")) dailyExpenditureRequestStream.print(Printed.toSysOut());
 
-        @Autowired
-        private PositionReportStreamBuilder positionReportStreamBuilder;
+            KStream<XwaySegmentDirection, NumberOfVehicles> numberOfVehiclesStream = numberOfVehiclesStreamBuilder.getStream(positionReportStream);
+            if (context.getDebugList().contains("NOV")) numberOfVehiclesStream.print(Printed.toSysOut());
 
-        @Autowired
-        private NumberOfVehiclesStreamBuilder numberOfVehiclesStreamBuilder;
+            KStream<XwaySegmentDirection, AverageVelocity> latestAverageVelocityStream = latestAverageVelocityStreamBuilder.getStream(positionReportStream);
+            if (context.getDebugList().contains("LAV")) latestAverageVelocityStream.print(Printed.toSysOut());
 
-        @Autowired
-        private CurrentTollStreamBuilder currentTollStreamBuilder;
+            KStream<XwaySegmentDirection, Long> accidentDetectionStream = accidentDetectionStreamBuilder.getStream(positionReportStream);
+            if (context.getDebugList().contains("ACC_DET")) accidentDetectionStream.print(Printed.toSysOut());
 
-        @Autowired
-        private TollNotificationStreamBuilder tollNotificationStreamBuilder;
+            BenchmarkMetrics metrics = new BenchmarkMetrics();
+            context.setMetrics(metrics);
 
-        @Autowired
-        private TollHistoryTableBuilder tollHistoryTableBuilder;
+            KStream<Void, AccidentNotification> accidentNotificationStream = accidentNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, accidentDetectionStream);
+            accidentNotificationStream.foreach((k, v) -> {
+                long latencyMs = (Context.getCurrentRuntimeInSeconds() * 1000);
+                metrics.recordProcessed("accident_notification");
+                metrics.recordResponseLatency("accident_notification", latencyMs > 0 ? latencyMs : 1);
+            });
 
-        @Autowired
-        private CurrentExpenditurePerVehicleTableBuilder currentExpenditurePerVehicleTableBuilder;
+            KStream<XwaySegmentDirection, CurrentToll> currentTollStream = currentTollStreamBuilder.getStream(latestAverageVelocityStream, numberOfVehiclesStream, accidentDetectionStream);
+            if (context.getDebugList().contains("CURR_TOLL")) currentTollStream.print(Printed.toSysOut());
 
-        @Autowired
-        private AccountBalanceRequestStreamBuilder accountBalanceStreamBuilder;
+            KStream<Void, TollNotification> tollNotificationStream = tollNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
+            tollNotificationStream.foreach((k, v) -> {
+                metrics.recordProcessed("toll_notification");
+                metrics.recordResponseLatency("toll_notification", 1);
+            });
 
-        @Autowired
-        private AccountBalanceResponseStreamBuilder accountBalanceResponseStreamBuilder;
+            KTable<Integer, ExpenditureAt> tollPerVehicleTable = currentExpenditurePerVehicleTableBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
+            if (context.getDebugList().contains("CURR_TOLL_TAB")) tollPerVehicleTable.toStream().print(Printed.toSysOut());
 
-        @Autowired
-        private DailyExpenditureRequestStreamBuilder dailyExpenditureRequestStreamBuilder;
+            KStream<Void, AccountBalanceResponse> accountBalanceResponseStream = accountBalanceResponseStreamBuilder.getStream(accountBalanceRequestStream, tollPerVehicleTable);
+            accountBalanceResponseStream.foreach((k, v) -> {
+                metrics.recordProcessed("account_balance");
+                metrics.recordResponseLatency("account_balance", 1);
+            });
 
-        @Autowired
-        private DailyExpenditureResponseStreamBuilder dailyExpenditureResponseStreamBuilder;
+            KStream<Void, DailyExpenditureResponse> dailyExpenditureResponseStream = dailyExpenditureResponseStreamBuilder.getStream(dailyExpenditureRequestStream, tollHistoryTable);
+            dailyExpenditureResponseStream.foreach((k, v) -> {
+                metrics.recordProcessed("daily_expenditure");
+                metrics.recordResponseLatency("daily_expenditure", 1);
+            });
+        }
 
-        @Override
-        public void run(String... var1) throws Exception {
-            logger.debug("Using mode {}", context.getLinearRoadMode());
-            StreamsBuilder builder = new StreamsBuilder();
-            context.setBuilder(builder);
-            KTable<XwayVehicleIdDay, Double> tollHistoryTable = null;
+        KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), context.getStreamBaseConfig());
+        kafkaStreams.start();
 
-            // historical info feeding
-            if (!context.getLinearRoadMode().equals("no-historical-feed")) {
-                tollHistoryTable = tollHistoryTableBuilder.getTable(builder);
-                if (context.getDebugList().contains("TOLL_HIST")) tollHistoryTable.toStream().print(Printed.toSysOut());
+        // Start periodic metrics snapshots (every 5 seconds)
+        BenchmarkMetrics metrics = context.getMetrics();
+        Timer snapshotTimer = null;
+        if (metrics != null) {
+            snapshotTimer = new Timer("metrics-snapshot", true);
+            snapshotTimer.scheduleAtFixedRate(new TimerTask() {
+                @Override
+                public void run() {
+                    metrics.takeSnapshot();
+                }
+            }, 5000, 5000);
+        }
 
-            }
+        if (!context.getLinearRoadMode().equals("no-historical-feed")) {
+            logger.debug("Start feeding with historical data");
+            historicalDataFeeder.startFeeding();
+        }
 
-            // executing the actual benchmark
-            if (!context.getLinearRoadMode().equals("no-benchmark")) {
+        if (!context.getLinearRoadMode().equals("no-benchmark")) {
+            logger.debug("Start feeding of tuples");
+            positionReporter.startFeeding();
+            logger.debug("Feeding Finished.");
+            Thread.sleep(10_000);
+        }
 
-                // a certain delay is required, because kafka streams will fail if reading from non-existent topic...
+        // Generate and print benchmark report
+        if (metrics != null) {
+            if (snapshotTimer != null) snapshotTimer.cancel();
+            metrics.takeSnapshot();
 
-                logger.debug("Starting benchmark");
-                tollHistoryTable = (tollHistoryTable == null) ? tollHistoryTableBuilder.getExistingTable(builder) : tollHistoryTable;
+            BenchmarkMetrics.BenchmarkReport report = metrics.generateReport(kafkaStreams);
+            report.printToConsole();
 
-                /*
-                  Converting position reports to processable Kafka stream
-                 */
-                KStream<XwaySegmentDirection, PositionReport> positionReportStream = positionReportStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("POS_REP")) positionReportStream.print(Printed.toSysOut());
-
-                /*
-                  A reduced version of the position report stream, that only considers the first position report within a segment per vehicle.
-                  This is required for both the accident and toll notification, which are only triggered, if a position report has no predecessor from the same segment.
-                 */
-                KStream<VehicleIdXwayDirection, SegmentCrossing> segmentCrossingPositionReportStream = segmentCrossingPositionReportBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("POS_SEG")) segmentCrossingPositionReportStream.print(Printed.toSysOut());
-
-                /*
-                  Converting account balance request to processable Kafka stream
-                 */
-                KStream<AccountBalanceRequest, Void> accountBalanceRequestStream = accountBalanceStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("ACCB_REQ")) accountBalanceRequestStream.print(Printed.toSysOut());
-
-                /*
-                  Converting daily expenditure request to processable Kafka stream
-                 */
-                KStream<DailyExpenditureRequest, Void> dailyExpenditureRequestStream = dailyExpenditureRequestStreamBuilder.getStream(builder);
-                if (context.getDebugList().contains("DEXP_REQ")) dailyExpenditureRequestStream.print(Printed.toSysOut());
-
-                /*
-                  Building NOV stream
-                 */
-                KStream<XwaySegmentDirection, NumberOfVehicles> numberOfVehiclesStream = numberOfVehiclesStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("NOV")) numberOfVehiclesStream.print(Printed.toSysOut());
-
-                /*
-                  Building LAV stream
-                 */
-                KStream<XwaySegmentDirection, AverageVelocity> latestAverageVelocityStream = latestAverageVelocityStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("LAV")) latestAverageVelocityStream.print(Printed.toSysOut());
-
-                /*
-                  Building Accident detection stream
-                 */
-                KStream<XwaySegmentDirection, Long> accidentDetectionStream = accidentDetectionStreamBuilder.getStream(positionReportStream);
-                if (context.getDebugList().contains("ACC_DET")) accidentDetectionStream.print(Printed.toSysOut());
-
-                /*
-                  Building Accident notification stream
-                 */
-                BenchmarkMetrics metrics = new BenchmarkMetrics();
-                context.setMetrics(metrics);
-
-                KStream<Void, AccidentNotification> accidentNotificationStream = accidentNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, accidentDetectionStream);
-                accidentNotificationStream.foreach((k, v) -> {
-                    long latencyMs = (LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds() * 1000);
-                    metrics.recordProcessed("accident_notification");
-                    metrics.recordResponseLatency("accident_notification", latencyMs > 0 ? latencyMs : 1);
-                });
-
-                /*
-                  Building current toll per Xway-Segmen-Directon tuple stream
-                 */
-                KStream<XwaySegmentDirection, CurrentToll> currentTollStream = currentTollStreamBuilder.getStream(latestAverageVelocityStream, numberOfVehiclesStream, accidentDetectionStream);
-                if (context.getDebugList().contains("CURR_TOLL")) currentTollStream.print(Printed.toSysOut());
-
-                /*
-                  Building stream to notify driver about tolls
-                 */
-                KStream<Void, TollNotification> tollNotificationStream = tollNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
-                tollNotificationStream.foreach((k, v) -> {
-                    metrics.recordProcessed("toll_notification");
-                    metrics.recordResponseLatency("toll_notification", 1);
-                });
-
-
-                /*
-                  Creating tables to retain the latest state about tolls
-                  (a) recent toll per vehicle
-                  (b) toll per vehicle, per day, per expressway
-                 */
-                // this table may be derived from the above (how to realize in Kafka streams?)
-                KTable<Integer, ExpenditureAt> tollPerVehicleTable = currentExpenditurePerVehicleTableBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
-                if (context.getDebugList().contains("CURR_TOLL_TAB")) tollPerVehicleTable.toStream().print(Printed.toSysOut());
-
-                /*
-                  Building stream to answer account balance requests
-                 */
-                KStream<Void, AccountBalanceResponse> accountBalanceResponseStream = accountBalanceResponseStreamBuilder.getStream(accountBalanceRequestStream, tollPerVehicleTable);
-                accountBalanceResponseStream.foreach((k, v) -> {
-                    metrics.recordProcessed("account_balance");
-                    metrics.recordResponseLatency("account_balance", 1);
-                });
-
-                /*
-                  Building stream to answer daily expenditure requests
-                 */
-                KStream<Void, DailyExpenditureResponse> dailyExpenditureResponseStream = dailyExpenditureResponseStreamBuilder.getStream(dailyExpenditureRequestStream, tollHistoryTable);
-                dailyExpenditureResponseStream.foreach((k, v) -> {
-                    metrics.recordProcessed("daily_expenditure");
-                    metrics.recordResponseLatency("daily_expenditure", 1);
-                });
-
-            }
-
-
-            KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), context.getStreamBaseConfig());
-            kafkaStreams.start();
-
-            // Start periodic metrics snapshots (every 5 seconds)
-            BenchmarkMetrics metrics = context.getMetrics();
-            java.util.Timer snapshotTimer = null;
-            if (metrics != null) {
-                snapshotTimer = new java.util.Timer("metrics-snapshot", true);
-                snapshotTimer.scheduleAtFixedRate(new java.util.TimerTask() {
-                    @Override
-                    public void run() {
-                        metrics.takeSnapshot();
-                    }
-                }, 5000, 5000);
-            }
-
-            if (!context.getLinearRoadMode().equals("no-historical-feed")) {
-                logger.debug("Start feeding with historical data");
-                historicalDataFeeder.startFeeding();
-            }
-
-            if (!context.getLinearRoadMode().equals("no-benchmark")) {
-                logger.debug("Start feeding of tuples");
-                positionReporter.startFeeding();
-                logger.debug("Feeding Finished.");
-
-                // Wait for processing to settle
-                Thread.sleep(10_000);
-            }
-
-            // Generate and print benchmark report
-            if (metrics != null) {
-                if (snapshotTimer != null) snapshotTimer.cancel();
-                metrics.takeSnapshot(); // final snapshot
-
-                BenchmarkMetrics.BenchmarkReport report = metrics.generateReport(kafkaStreams);
-                report.printToConsole();
-
-                // Write throughput timeline CSV
-                java.io.File outputDir = new java.io.File("output");
-                outputDir.mkdirs();
-                report.writeCsv(new java.io.File(outputDir, "throughput-timeline.csv"));
-                logger.info("Throughput timeline written to output/throughput-timeline.csv");
-            }
+            File outputDir = new File("output");
+            outputDir.mkdirs();
+            report.writeCsv(new File(outputDir, "throughput-timeline.csv"));
+            logger.info("Throughput timeline written to output/throughput-timeline.csv");
         }
     }
 
-    @Component
     public static class Context {
 
         private final RandomStringGenerator generator = new RandomStringGenerator();
-
         private final Properties streamBaseConfig = new Properties();
-
         private final Properties producerBaseConfig = new Properties();
-
         private StreamsBuilder builder;
-
         private BenchmarkMetrics metrics;
 
-        @Value("${linearroad.hisotical.data.path}")
-        private String historicalFilePath;
+        private final String historicalFilePath;
+        private final String filePath;
+        private final List<String> debugMode;
+        private final String bootstrapServers;
+        private final String linearRoadMode;
+        private final int numberOfThreads;
+        private final String applicationId;
+        private static DateTime benchmarkStartedAt = DateTime.now();
 
-        @Value("${linearroad.data.path}")
-        private String filePath;
-
-        @Value("#{'${linearroad.mode.debug}'.split(',')}")
-        private List<String> debugMode;
-
-        @Value("${linearroad.kafka.bootstrapservers}")
-        private String bootstrapServers;
-
-        @Value("${spring.profiles.active}")
-        private String env;
-
-        @Value("${linearroad.mode}")
-        private String linearRoadMode;
-
-        @Value("${linearroad.kafka.num_stream_threads}")
-        private int numberOfThreads;
-
-        private final String applicationId = generator.generateByRegex("[0-9a-z]{3}");
-        private static DateTime benchmarkStartedAt = DateTime.now(); // will be overriden, when first element is written to topic ....
-
-        public Context() {
+        public Context(String historicalFilePath, String filePath, List<String> debugMode,
+                       String bootstrapServers, String linearRoadMode, int numberOfThreads) {
+            this.historicalFilePath = historicalFilePath;
+            this.filePath = filePath;
+            this.debugMode = debugMode;
+            this.bootstrapServers = bootstrapServers;
+            this.linearRoadMode = linearRoadMode;
+            this.numberOfThreads = numberOfThreads;
+            this.applicationId = generator.generateByRegex("[0-9a-z]{3}");
+            initializeBaseConfig();
         }
 
-        public String topic(String topic) {
-            return topic;//+"-"+applicationId;
+        /**
+         * Loads Context from a properties file. Looks on classpath first, then filesystem.
+         */
+        public static Context fromProperties(String path) {
+            Properties props = new Properties();
+            // Try classpath first
+            try (InputStream is = Context.class.getClassLoader().getResourceAsStream(path)) {
+                if (is != null) {
+                    props.load(is);
+                } else {
+                    // Fall back to filesystem
+                    try (FileInputStream fis = new FileInputStream(path)) {
+                        props.load(fis);
+                    }
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to load config: " + path, e);
+            }
+
+            String debugStr = props.getProperty("linearroad.mode.debug", "");
+            List<String> debugList = Arrays.stream(debugStr.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+
+            return new Context(
+                    props.getProperty("linearroad.hisotical.data.path"),
+                    props.getProperty("linearroad.data.path"),
+                    debugList,
+                    props.getProperty("linearroad.kafka.bootstrapservers", "localhost:9092"),
+                    props.getProperty("linearroad.mode", "all"),
+                    Integer.parseInt(props.getProperty("linearroad.kafka.num_stream_threads", "0"))
+            );
         }
 
-        @PostConstruct
         private void initializeBaseConfig() {
             logger.debug("Configured kafka servers are {}", bootstrapServers);
-            logger.debug("Application Id is {} and running in env {}", applicationId, env);
-            streamBaseConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, "linearroad-benchmark-" + this.getApplicationId());
+            logger.debug("Application Id is {}", applicationId);
+            streamBaseConfig.put(StreamsConfig.APPLICATION_ID_CONFIG, "linearroad-benchmark-" + applicationId);
             streamBaseConfig.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
             streamBaseConfig.put(StreamsConfig.DEFAULT_TIMESTAMP_EXTRACTOR_CLASS_CONFIG, PositionReportHandler.TimeStampExtractor.class.getName());
             streamBaseConfig.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, (numberOfThreads < 1) ? Runtime.getRuntime().availableProcessors() : numberOfThreads);
 
             producerBaseConfig.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-
             producerBaseConfig.put(ProducerConfig.ACKS_CONFIG, "all");
             producerBaseConfig.put(ProducerConfig.RETRIES_CONFIG, 0);
             producerBaseConfig.put(ProducerConfig.BUFFER_MEMORY_CONFIG, 33554432);
         }
 
-        public Properties getStreamBaseConfig() {
-            return streamBaseConfig;
+        public String topic(String topic) {
+            return topic;
         }
 
-        public Properties getProducerBaseConfig() {
-            return producerBaseConfig;
-        }
+        public Properties getStreamBaseConfig() { return streamBaseConfig; }
+        public Properties getProducerBaseConfig() { return producerBaseConfig; }
 
         public static long getCurrentRuntimeInSeconds() {
             return Seconds.secondsBetween(benchmarkStartedAt, DateTime.now()).getSeconds();
         }
 
-        public static void markAsStarted() {
-            benchmarkStartedAt = DateTime.now();
-        }
+        public static void markAsStarted() { benchmarkStartedAt = DateTime.now(); }
 
-        public String getFilePath() {
-            return filePath;
-        }
-
-        public String getApplicationId() {
-            return applicationId;
-        }
-
-        public String getHistoricalFilePath() {
-            return historicalFilePath;
-        }
-
-        public String getLinearRoadMode() {
-            return linearRoadMode;
-        }
-
-        public List<String> getDebugList() {
-            return debugMode;
-        }
-
-        public StreamsBuilder getBuilder() {
-            return builder;
-        }
-
-        public void setBuilder(StreamsBuilder builder) {
-            this.builder = builder;
-        }
-
-        public BenchmarkMetrics getMetrics() {
-            return metrics;
-        }
-
-        public void setMetrics(BenchmarkMetrics metrics) {
-            this.metrics = metrics;
-        }
+        public String getFilePath() { return filePath; }
+        public String getApplicationId() { return applicationId; }
+        public String getHistoricalFilePath() { return historicalFilePath; }
+        public String getLinearRoadMode() { return linearRoadMode; }
+        public List<String> getDebugList() { return debugMode; }
+        public StreamsBuilder getBuilder() { return builder; }
+        public void setBuilder(StreamsBuilder builder) { this.builder = builder; }
+        public BenchmarkMetrics getMetrics() { return metrics; }
+        public void setMetrics(BenchmarkMetrics metrics) { this.metrics = metrics; }
     }
-
-
 }

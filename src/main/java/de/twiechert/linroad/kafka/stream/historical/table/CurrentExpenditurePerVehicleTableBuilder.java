@@ -13,9 +13,6 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Pair;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 
@@ -30,11 +27,13 @@ import java.time.Duration;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class CurrentExpenditurePerVehicleTableBuilder {
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public CurrentExpenditurePerVehicleTableBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     public KTable<Integer, ExpenditureAt> getStream(KStream<VehicleIdXwayDirection, SegmentCrossing> consecutivePositionReports,
                                                     KStream<XwaySegmentDirection, CurrentToll> currentTollStream) {

@@ -115,15 +115,18 @@ echo ""
 echo "[$(date +%T)] Phase 1: Pre-populating Kafka topics..."
 FEED_START=$(date +%s%3N)
 
+cat > "$DATA_DIR/cluster.properties" <<PROPS
+linearroad.data.path=$DATA_DIR/benchmark.dat
+linearroad.hisotical.data.path=$DATA_DIR/benchmark.dat.tolls.dat
+linearroad.kafka.bootstrapservers=$BOOTSTRAP
+linearroad.mode=all
+linearroad.mode.debug=false
+linearroad.kafka.num_stream_threads=0
+PROPS
+
 java -cp "target/kafka-linearroad-1.0-SNAPSHOT.jar:aws-msk-iam-auth-2.0.3-all.jar" \
   de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication \
-  --linearroad.data.path="$DATA_DIR/benchmark.dat" \
-  --linearroad.hisotical.data.path="$DATA_DIR/benchmark.dat.tolls.dat" \
-  --linearroad.kafka.bootstrapservers="$BOOTSTRAP" \
-  --linearroad.mode=all \
-  --linearroad.mode.debug=false \
-  --linearroad.kafka.num_stream_threads=0 \
-  --spring.profiles.active=cluster
+  "$DATA_DIR/cluster.properties"
 
 FEED_END=$(date +%s%3N)
 FEED_DURATION_MS=$((FEED_END - FEED_START))

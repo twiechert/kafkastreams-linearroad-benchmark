@@ -7,8 +7,6 @@ import de.twiechert.linroad.kafka.model.historical.*;
 import de.twiechert.linroad.kafka.stream.StreamBuilder;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.kstream.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 
 /**
@@ -17,13 +15,11 @@ import org.springframework.stereotype.Component;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class DailyExpenditureResponseStreamBuilder extends StreamBuilder<Void, DailyExpenditureResponse> {
 
     public final static String TOPIC = "DAILY_EXP_RESP";
 
 
-    @Autowired
     public DailyExpenditureResponseStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }

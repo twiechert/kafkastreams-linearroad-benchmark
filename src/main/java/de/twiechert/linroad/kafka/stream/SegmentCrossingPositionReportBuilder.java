@@ -11,9 +11,6 @@ import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Quartet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 /**
@@ -22,14 +19,16 @@ import java.time.Duration;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class SegmentCrossingPositionReportBuilder {
 
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(SegmentCrossingPositionReportBuilder.class);
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public SegmentCrossingPositionReportBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     public KStream<VehicleIdXwayDirection, SegmentCrossing> getStream(KStream<XwaySegmentDirection, PositionReport> positionReports) {
         logger.debug("Building stream to notify segment crossing position reports");

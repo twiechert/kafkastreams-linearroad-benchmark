@@ -5,9 +5,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.LineIterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.io.File;
 
 /**
@@ -16,17 +13,13 @@ import java.io.File;
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  *
  */
-@Component
 public class HistoricalDataFeeder {
 
     private final String filePath;
     private final TollHistoryRequestHandler tollHistoryRequestHandler;
 
+    private static final Logger logger = LoggerFactory.getLogger(HistoricalDataFeeder.class);
 
-    private final static Logger logger = (Logger) LoggerFactory
-            .getLogger(HistoricalDataFeeder.class);
-
-    @Autowired
     public HistoricalDataFeeder(LinearRoadKafkaBenchmarkApplication.Context context, TollHistoryRequestHandler tollHistoryRequestHandler) {
         this.tollHistoryRequestHandler = tollHistoryRequestHandler;
         this.filePath = context.getHistoricalFilePath();

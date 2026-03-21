@@ -10,8 +10,6 @@ import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.kstream.Produced;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 
 /**
@@ -19,15 +17,14 @@ import org.springframework.stereotype.Component;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class TollHistoryTableBuilder {
 
 
     public static final String TOPIC = "TOLL_HISTORY";
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
 
-    public TollHistoryTableBuilder() {
+    public TollHistoryTableBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
     }
 
     public KTable<XwayVehicleIdDay, Double> getTable(StreamsBuilder builder) {

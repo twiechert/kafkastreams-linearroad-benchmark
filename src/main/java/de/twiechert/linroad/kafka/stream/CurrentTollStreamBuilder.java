@@ -8,9 +8,6 @@ import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Quartet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 /**
@@ -18,7 +15,6 @@ import java.time.Duration;
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  *
  */
-@Component
 public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection, CurrentToll> {
 
     public static final String TOPIC = "CURRENT_TOLL";
@@ -27,7 +23,6 @@ public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(CurrentTollStreamBuilder.class);
 
-    @Autowired
     public CurrentTollStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }

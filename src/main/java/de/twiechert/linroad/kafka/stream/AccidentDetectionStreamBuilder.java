@@ -13,9 +13,6 @@ import org.javatuples.Quintet;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.stream.Collectors;
@@ -26,15 +23,17 @@ import java.util.stream.IntStream;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class AccidentDetectionStreamBuilder {
 
 
     private static final Logger logger = LoggerFactory
             .getLogger(AccidentDetectionStreamBuilder.class);
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public AccidentDetectionStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     public KStream<XwaySegmentDirection, Long> getStream(KStream<XwaySegmentDirection, PositionReport> positionReportStream) {
         logger.debug("Building stream to identify accidents");

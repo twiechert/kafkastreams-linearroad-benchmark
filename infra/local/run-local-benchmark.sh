@@ -103,16 +103,18 @@ echo "  Tolls: $(du -h "$DATA_DIR/benchmark.dat.tolls.dat" | cut -f1)"
 echo ""
 echo "[$(date +%T)] Starting $STREAM_THREADS-thread Kafka Streams worker..."
 
+# Generate config file for the streaming application
+cat > "$DATA_DIR/benchmark.properties" <<PROPS
+linearroad.data.path=$DATA_DIR/benchmark.dat
+linearroad.hisotical.data.path=$DATA_DIR/benchmark.dat.tolls.dat
+linearroad.kafka.bootstrapservers=$BOOTSTRAP
+linearroad.mode=all
+linearroad.mode.debug=false
+linearroad.kafka.num_stream_threads=$STREAM_THREADS
+PROPS
+
 # Run the streaming application in the background
-# It processes records from Kafka topics in parallel via stream threads
-java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar \
-  --linearroad.data.path="$DATA_DIR/benchmark.dat" \
-  --linearroad.hisotical.data.path="$DATA_DIR/benchmark.dat.tolls.dat" \
-  --linearroad.kafka.bootstrapservers="$BOOTSTRAP" \
-  --linearroad.mode=all \
-  --linearroad.mode.debug=false \
-  --linearroad.kafka.num_stream_threads="$STREAM_THREADS" \
-  --spring.profiles.active=dev &
+java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar "$DATA_DIR/benchmark.properties" &
 
 APP_PID=$!
 echo "  Streams app PID: $APP_PID"

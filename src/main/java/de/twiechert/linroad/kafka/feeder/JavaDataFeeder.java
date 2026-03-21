@@ -3,8 +3,6 @@ package de.twiechert.linroad.kafka.feeder;
 import de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -18,25 +16,23 @@ import java.util.Arrays;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class JavaDataFeeder {
 
     private static final Logger logger = LoggerFactory.getLogger(JavaDataFeeder.class);
 
     private final String filePath;
+    private final PositionReportHandler positionReportHandler;
+    private final DailyExpenditureRequestHandler dailyExpenditureRequestHandler;
+    private final AccountBalanceRequestHandler accountBalanceRequestHandler;
 
-    @Autowired
-    private PositionReportHandler positionReportHandler;
-
-    @Autowired
-    private DailyExpenditureRequestHandler dailyExpenditureRequestHandler;
-
-    @Autowired
-    private AccountBalanceRequestHandler accountBalanceRequestHandler;
-
-    @Autowired
-    public JavaDataFeeder(LinearRoadKafkaBenchmarkApplication.Context context) {
+    public JavaDataFeeder(LinearRoadKafkaBenchmarkApplication.Context context,
+                          PositionReportHandler positionReportHandler,
+                          DailyExpenditureRequestHandler dailyExpenditureRequestHandler,
+                          AccountBalanceRequestHandler accountBalanceRequestHandler) {
         this.filePath = context.getFilePath();
+        this.positionReportHandler = positionReportHandler;
+        this.dailyExpenditureRequestHandler = dailyExpenditureRequestHandler;
+        this.accountBalanceRequestHandler = accountBalanceRequestHandler;
     }
 
     /**

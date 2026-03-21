@@ -5,9 +5,6 @@ import de.twiechert.linroad.kafka.feeder.TupleHandler;
 import de.twiechert.linroad.kafka.model.historical.XwayVehicleIdDay;
 import org.apache.kafka.common.serialization.DoubleSerializer;
 import org.apache.kafka.common.serialization.Serializer;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import static de.twiechert.linroad.kafka.stream.Util.pDob;
 import static de.twiechert.linroad.kafka.stream.Util.pInt;
 
@@ -15,12 +12,10 @@ import static de.twiechert.linroad.kafka.stream.Util.pInt;
  * This class handles a toll history tuple by sending it to the respective Kafka topic.
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class TollHistoryRequestHandler extends TupleHandler<XwayVehicleIdDay, Double> {
 
     public static final String TOPIC = "TOLL_HIST_TABLE";
 
-    @Autowired
     public TollHistoryRequestHandler(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }

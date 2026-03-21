@@ -10,21 +10,16 @@ import de.twiechert.linroad.kafka.stream.StreamBuilder;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.kstream.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 /**
  * This stream represents the response of account balance requests. In order to respond to these requests,
  * the actual request stream is joined with a table of expenditures per vehicle.
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class AccountBalanceResponseStreamBuilder extends StreamBuilder<Void, AccountBalanceResponse> {
 
     public final static String TOPIC = "ACCOUNT_BALANCE_RESP";
 
-    @Autowired
     public AccountBalanceResponseStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }

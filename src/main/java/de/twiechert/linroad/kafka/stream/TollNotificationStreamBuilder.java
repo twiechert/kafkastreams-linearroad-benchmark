@@ -9,9 +9,6 @@ import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 /**
@@ -24,7 +21,6 @@ import java.time.Duration;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotification> {
 
     public static String TOPIC = "TOLL_NOT";
@@ -33,7 +29,6 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
             .getLogger(TollNotificationStreamBuilder.class);
 
 
-    @Autowired
     public TollNotificationStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }

@@ -9,9 +9,6 @@ import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import java.time.Duration;
 
 /**
@@ -23,7 +20,6 @@ import java.time.Duration;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, AccidentNotification> {
 
     private static final String TOPIC = "ACC_NOT";
@@ -32,7 +28,6 @@ public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, Accid
             .getLogger(AccidentNotificationStreamBuilder.class);
 
 
-    @Autowired
     public AccidentNotificationStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }
