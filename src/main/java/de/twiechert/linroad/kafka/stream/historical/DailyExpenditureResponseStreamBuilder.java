@@ -33,7 +33,7 @@ public class DailyExpenditureResponseStreamBuilder extends StreamBuilder<Void, D
          */
         KStream<XwayVehicleIdDay, DailyExpenditureRequest> accountBalanceRequestsPerVehicleXwayAndDay =
                 dailyExpenditureRequestStream.map((k, v) -> new KeyValue<>(new XwayVehicleIdDay(k.getXWay(), k.getVehicleId(), k.getDay()), k))
-                        .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_XWAY_VEH_DAY")));
+                        .repartition(Repartitioned.<XwayVehicleIdDay, DailyExpenditureRequest>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_XWAY_VEH_DAY")));
 
 
         return accountBalanceRequestsPerVehicleXwayAndDay.leftJoin(tollHistory,

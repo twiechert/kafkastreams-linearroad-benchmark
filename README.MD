@@ -16,35 +16,67 @@ The data feeder is implemented in pure Java — no native C libraries are requir
 
 ## Getting Started
 
-### Starting the Application
+### Prerequisites
 
-For most configuration items there are default values specified which can be overridden. As the cluster profile is set to active, the `application-cluster.properties` file has precedence and overrides the default values specified in `application.properties`. If you execute the program as shown below, all stream tuples of the NOV and LAV stream will be printed to stdout.
-
-```bash
-java -jar apps/kafka-streams-linearroad.jar \
-  --linearroad.data.path=/home/hadoop/linearroad/L1/car.dat \
-  --linearroad.hisotical.data.path=/home/hadoop/linearroad/L1/car.dat.tolls.dat \
-  --linearroad.kafka.bootstrapservers=localhost:9092 \
-  --linearroad.mode.debug=NOV,LAV \
-  --spring.profiles.active=cluster
-```
-
-If the historical toll table has already been fed, you can skip this part:
-
-```bash
-java -jar apps/kafka-streams-linearroad.jar \
-  --linearroad.data.path=/home/hadoop/linearroad/L1/car.dat \
-  --linearroad.hisotical.data.path=/home/hadoop/linearroad/L1/car.dat.tolls.dat \
-  --linearroad.kafka.bootstrapservers=localhost:9092 \
-  --linearroad.mode=no-historial-feed \
-  --linearroad.mode.debug=NOV,LAV \
-  --spring.profiles.active=cluster
-```
+- Java 17+
+- Maven 3.8+
+- Docker (for local benchmarking)
+- [just](https://github.com/casey/just#installation) task runner (optional, but recommended)
 
 ### Building the Application
 
 ```bash
+just build
+# or directly:
 mvn clean package -Dmaven.test.skip=true
+```
+
+### Running Tests
+
+```bash
+just test
+# or directly:
+mvn test -B -Dtest='!*Benchmark*' -DfailIfNoTests=false
+```
+
+### Running a Local Benchmark
+
+The easiest way to run a benchmark locally is via the `justfile`:
+
+```bash
+# Run the full end-to-end benchmark (starts Kafka via Docker, generates data, runs streams)
+just local
+
+# Customize parameters
+just local xways=2 duration=5 vehicles=50 threads=4
+```
+
+See all available tasks with `just --list`.
+
+### Running Manually
+
+Configuration is loaded from `application.properties` on the classpath. Properties can be overridden by passing a custom properties file as the first argument.
+
+```bash
+java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar application.properties
+```
+
+Key properties (see `src/main/resources/application.properties`):
+
+| Property | Description | Default |
+|---|---|---|
+| `linearroad.data.path` | Path to the generated `.dat` file | — |
+| `linearroad.hisotical.data.path` | Path to the historical tolls file | — |
+| `linearroad.kafka.bootstrapservers` | Kafka broker addresses | `localhost:9092` |
+| `linearroad.mode` | `all`, `no-historical-feed`, or `no-benchmark` | `all` |
+| `linearroad.mode.debug` | Comma-separated stream names to print (e.g. `NOV,LAV`) | — |
+| `linearroad.kafka.num_stream_threads` | Number of stream threads (0 = auto-detect CPUs) | `0` |
+
+If the historical toll table has already been fed, skip re-feeding:
+
+```bash
+java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar my-config.properties
+# with linearroad.mode=no-historical-feed in the properties file
 ```
 
 ## Serializer Libraries

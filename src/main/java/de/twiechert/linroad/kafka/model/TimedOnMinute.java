@@ -4,7 +4,7 @@ package de.twiechert.linroad.kafka.model;
  * This interface declares that a tuple has incorporated event time in minutes.
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-public interface TimedOnMinute {
+public interface TimedOnMinute extends java.io.Serializable {
 
     long getMinute();
 

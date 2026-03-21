@@ -77,7 +77,7 @@ public class OnMinuteChangeEmitter {
 
         @Override
         public Set<StoreBuilder<?>> stores() {
-            StoreBuilder<KeyValueStore<TimedKey<K>, V>> storeBuilder = Stores.keyValueStoreBuilder(
+            StoreBuilder<KeyValueStore<TimedKey<K>, V>> storeBuilder = Stores.<TimedKey<K>, V>keyValueStoreBuilder(
                     Stores.inMemoryKeyValueStore(storeName),
                     new de.twiechert.linroad.kafka.core.serde.DefaultSerde<>(),
                     new de.twiechert.linroad.kafka.core.serde.DefaultSerde<>()
@@ -141,7 +141,7 @@ public class OnMinuteChangeEmitter {
 
         @Override
         public Set<StoreBuilder<?>> stores() {
-            StoreBuilder<KeyValueStore<TimedKey<K>, V>> storeBuilder = Stores.keyValueStoreBuilder(
+            StoreBuilder<KeyValueStore<TimedKey<K>, V>> storeBuilder = Stores.<TimedKey<K>, V>keyValueStoreBuilder(
                     Stores.inMemoryKeyValueStore(storeName),
                     new de.twiechert.linroad.kafka.core.serde.DefaultSerde<>(),
                     new de.twiechert.linroad.kafka.core.serde.DefaultSerde<>()

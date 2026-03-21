@@ -55,6 +55,11 @@
             <artifactId>kryo</artifactId>
             <version>5.6.0</version>
         </dependency>
+        <dependency>
+            <groupId>de.ruedigermoeller</groupId>
+            <artifactId>fst</artifactId>
+            <version>2.57</version>
+        </dependency>
 
         <!-- Utilities -->
         <dependency>

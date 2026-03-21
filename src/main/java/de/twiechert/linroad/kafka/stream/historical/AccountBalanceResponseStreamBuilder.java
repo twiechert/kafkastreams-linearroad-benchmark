@@ -30,7 +30,7 @@ public class AccountBalanceResponseStreamBuilder extends StreamBuilder<Void, Acc
           Change the key of the request stream such that we can aggregate on a per vehicle basis.
          */
         KStream<Integer, AccountBalanceRequest> accountBalanceRequestsPerVehicle = accountBalanceRequestStream.map((k, v) -> new KeyValue<>(k.getVehicleID(), k))
-                .repartition(Repartitioned.with(new Serdes.IntegerSerde(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_VEHICLE")));
+                .repartition(Repartitioned.<Integer, AccountBalanceRequest>with(new Serdes.IntegerSerde(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_VEHICLE")));
 
 
         return accountBalanceRequestsPerVehicle.leftJoin(currentTollTable,

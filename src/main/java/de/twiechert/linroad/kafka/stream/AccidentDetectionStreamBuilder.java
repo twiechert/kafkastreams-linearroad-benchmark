@@ -78,7 +78,7 @@ public class AccidentDetectionStreamBuilder {
                         // creates range 0,1,2,3,4
                         IntStream.range(0, 5).mapToObj(in -> new KeyValue<>(new XwaySegmentDirection(key.getValue0(), ((key.getValue3() - in) < 0) ? 0 : key.getValue3() - in, key.getValue2()),
                                 value0.getWindowEndMinute())).collect(Collectors.toList()))
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DETECTION")));
+                .repartition(Repartitioned.<XwaySegmentDirection, Long>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DETECTION")));
 
 
     }

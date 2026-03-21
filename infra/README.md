@@ -39,11 +39,17 @@ Most streams are keyed by `(xway, segment, direction)`. Since Kafka hashes the f
 
 ## Usage
 
+All infrastructure commands are available as `just` tasks from the project root. You can also run the Terraform commands directly.
+
 ### 1. Deploy
 
 ```bash
-cd infra/terraform
+# Using justfile (from project root)
+just infra-init
+just infra-up my-key xways=10 workers=3
 
+# Or directly with Terraform
+cd infra/terraform
 terraform init
 terraform plan -var key_name=my-key -var num_xways=10 -var worker_count=3
 terraform apply -var key_name=my-key -var num_xways=10 -var worker_count=3
@@ -52,7 +58,9 @@ terraform apply -var key_name=my-key -var num_xways=10 -var worker_count=3
 ### 2. Run Benchmark
 
 ```bash
-# SSH to the feeder
+# SSH to the feeder (using justfile or directly)
+just ssh-feeder my-key
+# or:
 ssh -i ~/.ssh/my-key.pem ubuntu@$(terraform output -raw feeder_public_ip)
 
 # Wait for setup to complete (check /var/log/feeder-init.log)
@@ -73,6 +81,10 @@ journalctl -u lr-worker -f
 ### 4. Tear Down
 
 ```bash
+# Using justfile
+just infra-down my-key
+
+# Or directly
 terraform destroy -var key_name=my-key
 ```
 

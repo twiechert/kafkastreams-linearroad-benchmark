@@ -42,7 +42,7 @@ public class AccidentNotificationStreamBuilder extends StreamBuilder<Void, Accid
           We use the consecutive position report stream, that only emits the first position report in a segment per vehicle.
          */
         KStream<XwaySegmentDirection, AccidentNotificationIntermediate> segmentCrossingPositionReportsForAccNotification = segmentCrossingPositionReports.map((k, v) -> new KeyValue<>(new XwaySegmentDirection(k.getXway(), v.getSegment(), k.getDir()), AccidentNotificationIntermediate.fromPosReport(v)))
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DET_POS")));
+                .repartition(Repartitioned.<XwaySegmentDirection, AccidentNotificationIntermediate>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_DET_POS")));
         /*
           The trigger for an accident notification is a position report
           that identifies a vehicle entering a segment 0 to 4 segments upstream of some accident location,
