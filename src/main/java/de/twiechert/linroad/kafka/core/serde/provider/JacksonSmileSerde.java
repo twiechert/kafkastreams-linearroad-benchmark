@@ -1,54 +1,44 @@
 package de.twiechert.linroad.kafka.core.serde.provider;
 
-/*
-  Created by tafyun on 04.08.16.
- */
-
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.smile.SmileFactory;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serializer;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
-import org.springframework.kafka.support.serializer.JsonSerializer;
 
 import java.io.Serializable;
 import java.util.Map;
 
-
 /**
- * This Serde implementation used Jackson with the Smile format adapter (https://github.com/FasterXML/jackson-dataformat-smile).
+ * This Serde implementation uses Jackson with the Smile format adapter.
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
 public class JacksonSmileSerde<T extends Serializable> implements Serde<T> {
 
-    private final java.lang.Class<T> classOb;
+    private final Class<T> classOb;
 
     public JacksonSmileSerde(Class<T> classOb) {
         this.classOb = classOb;
     }
 
-
     @Override
     public Serializer<T> serializer() {
-        return new JsonSerializer<>(getObjectMapper());
+        return new SmileSerializer<>();
     }
 
     @Override
     public Deserializer<T> deserializer() {
-        return new JsonDeserializer<>(this.classOb, getObjectMapper());
+        return new SmileDeserializer<>(classOb);
     }
 
     @Override
     public void configure(Map<String, ?> configs, boolean isKey) {
-
     }
 
     @Override
     public void close() {
-
     }
 
     public static ObjectMapper getObjectMapper() {
@@ -59,5 +49,38 @@ public class JacksonSmileSerde<T extends Serializable> implements Serde<T> {
                 .withSetterVisibility(JsonAutoDetect.Visibility.NONE)
                 .withCreatorVisibility(JsonAutoDetect.Visibility.NONE));
         return mapper;
+    }
+
+    private static class SmileSerializer<T> implements Serializer<T> {
+        private final ObjectMapper mapper = getObjectMapper();
+
+        @Override
+        public byte[] serialize(String topic, T data) {
+            if (data == null) return null;
+            try {
+                return mapper.writeValueAsBytes(data);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize", e);
+            }
+        }
+    }
+
+    private static class SmileDeserializer<T> implements Deserializer<T> {
+        private final ObjectMapper mapper = getObjectMapper();
+        private final Class<T> targetType;
+
+        SmileDeserializer(Class<T> targetType) {
+            this.targetType = targetType;
+        }
+
+        @Override
+        public T deserialize(String topic, byte[] data) {
+            if (data == null) return null;
+            try {
+                return mapper.readValue(data, targetType);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to deserialize", e);
+            }
+        }
     }
 }

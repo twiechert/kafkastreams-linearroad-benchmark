@@ -4,9 +4,6 @@ import de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication;
 import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.model.historical.AccountBalanceRequest;
 import org.apache.kafka.common.serialization.Serializer;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import static de.twiechert.linroad.kafka.stream.Util.pInt;
 import static de.twiechert.linroad.kafka.stream.Util.pLng;
 
@@ -16,13 +13,10 @@ import static de.twiechert.linroad.kafka.stream.Util.pLng;
  * Key corresponds to (Time: t, VID: v, QID: q).
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class AccountBalanceRequestHandler extends TupleHandler<AccountBalanceRequest, Void> {
 
     public static final String TOPIC = "BALANCE";
 
-
-    @Autowired
     public AccountBalanceRequestHandler(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context, 2);
     }

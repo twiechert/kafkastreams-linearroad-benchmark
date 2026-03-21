@@ -7,9 +7,6 @@ import de.twiechert.linroad.kafka.model.XwaySegmentDirection;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.processor.TimestampExtractor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import static de.twiechert.linroad.kafka.stream.Util.pInt;
 import static de.twiechert.linroad.kafka.stream.Util.pLng;
 
@@ -18,12 +15,10 @@ import static de.twiechert.linroad.kafka.stream.Util.pLng;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com> *
  */
-@Component
 public class PositionReportHandler extends TupleHandler<XwaySegmentDirection, PositionReport> {
 
     public static final String TOPIC = "POS";
 
-    @Autowired
     public PositionReportHandler(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context, 0);
     }
@@ -59,8 +54,8 @@ public class PositionReportHandler extends TupleHandler<XwaySegmentDirection, Po
         private final TupleTimestampExtractor tupleTimestampExtractor = new TupleTimestampExtractor(TupleTimestampExtractor.KeyValue.Value, 0);
 
         @Override
-        public long extract(ConsumerRecord<Object, Object> record) {
-            return tupleTimestampExtractor.extract(record);
+        public long extract(ConsumerRecord<Object, Object> record, long partitionTime) {
+            return tupleTimestampExtractor.extract(record, partitionTime);
         }
     }
 }

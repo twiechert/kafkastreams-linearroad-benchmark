@@ -12,6 +12,8 @@ The Linear Road Benchmark is a well-known streaming benchmark that simulates a t
 
 This project implements all required benchmark components using the Kafka Streams DSL, including custom windowing strategies and event-time processing. The detailed design rationale is documented below and also available as a [PDF](design-document.pdf).
 
+The data feeder is implemented in pure Java — no native C libraries are required. Input data files (`.dat`) can be generated using the [WalmartLabs LinearGenerator](https://github.com/walmartlabs/LinearGenerator).
+
 ## Getting Started
 
 ### Starting the Application

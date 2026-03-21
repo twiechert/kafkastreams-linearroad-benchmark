@@ -5,13 +5,11 @@ import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.core.serde.DefaultSerde;
 import de.twiechert.linroad.kafka.model.*;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.JoinWindows;
-import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import java.time.Duration;
 
 /**
  * This stream realizes the toll notification.
@@ -23,7 +21,6 @@ import org.springframework.stereotype.Component;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotification> {
 
     public static String TOPIC = "TOLL_NOT";
@@ -32,7 +29,6 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
             .getLogger(TollNotificationStreamBuilder.class);
 
 
-    @Autowired
     public TollNotificationStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }
@@ -45,7 +41,7 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
         /*
          * If the vehicle exits at the exit ramp of a segment, the toll for that segment is not charged. -> thus position reports on exits can be ignored.
          *
-         * Before joining, times have to be remapped, because: "the toll reported for the segment being exited is assessed to the vehicle’s account.
+         * Before joining, times have to be remapped, because: "the toll reported for the segment being exited is assessed to the vehicle's account.
          * Thus, a toll calculation for one segment often is concurrent with an account being debited for the previous segment."
          * in order to join, we map the time to minutes (tolls are based on the current minute)
          * but we must preserve the actual timestamp, because it has to be emitted in the response stream
@@ -60,11 +56,12 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
                         // for joining purpose we need the minute of the preceding position report, but we need to keep the exact timestamp for emitting
                         new ConsecutivePosReportIntermediate(Util.minuteOfReport(v.getTime()), v.getTime(), k.getVehicleId())))
                 // join with current toll stream, create VID, time, current time, speed , toll
-                .through(new DefaultSerde<>(), new DefaultSerde<>(), "SEG_CROSSINGS_FOR_TOLL_NOT");
+                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName("SEG_CROSSINGS_FOR_TOLL_NOT"));
 
         return segmentCrossingPerXwaySegmentDir
                 .join(currentTollStream, (psRep, currToll) -> new TollNotification(psRep.getVehicleId(), psRep.getTime(), LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds(), currToll.getVelocity(), currToll.getToll()),
-                        JoinWindows.of("SEG_CROSSINGS_FOR_TOLL_NOT_CURR_TOLL_WINDOW"), new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>())
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
+                        StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 .selectKey((k, v) -> new Void());
     }
 

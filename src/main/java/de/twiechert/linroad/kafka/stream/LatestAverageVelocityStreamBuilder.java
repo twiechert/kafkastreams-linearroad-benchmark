@@ -8,24 +8,25 @@ import de.twiechert.linroad.kafka.model.XwaySegmentDirection;
 import de.twiechert.linroad.kafka.stream.processor.OnMinuteChangeEmitter;
 import de.twiechert.linroad.kafka.stream.windowing.LavWindow;
 import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.kstream.Grouped;
 import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.Materialized;
 import org.javatuples.Pair;
 import org.javatuples.Triplet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 /**
  * This class builds the stream of latest average velocities keyed by (expressway, segment, direction).
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class LatestAverageVelocityStreamBuilder {
 
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
+
+    public LatestAverageVelocityStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
+    }
 
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(LatestAverageVelocityStreamBuilder.class);
@@ -33,16 +34,18 @@ public class LatestAverageVelocityStreamBuilder {
 
     public KStream<XwaySegmentDirection, AverageVelocity> getStream(KStream<XwaySegmentDirection, PositionReport> positionReportStream) {
         logger.debug("Building stream to identify latest average velocity");
-        LavWindow lavWindow = LavWindow.of(context.topic("LAV_WINDOW"));
+        LavWindow lavWindow = LavWindow.of();
 
         KStream<XwaySegmentDirection, AverageVelocity> lavAgg = positionReportStream.mapValues(v -> new Pair<>(v.getTime(), v.getSpeed()))
-                .aggregateByKey(() -> new LatestAverageVelocityIntermediate(0L, 0, 0d),
-                        (key, value, agg) -> LatestAverageVelocityIntermediate.fromLast(agg, value.getValue0(), value.getValue1())
-                        , lavWindow, new DefaultSerde<>(), new DefaultSerde<>())
+                .groupByKey(Grouped.with(new DefaultSerde<>(), new DefaultSerde<>()))
+                .windowedBy(lavWindow)
+                .aggregate(() -> new LatestAverageVelocityIntermediate(0L, 0, 0d),
+                        (key, value, agg) -> LatestAverageVelocityIntermediate.fromLast(agg, value.getValue0(), value.getValue1()),
+                        Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream()
                 .map((k, v) -> new KeyValue<>(k.key(), new AverageVelocity(Util.minuteOfReport(k.window().end()), v.getValue2(), v.getPosReportMinute())));
 
-        return OnMinuteChangeEmitter.getForWindowed(context.getBuilder(), lavAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-lav");
+        return OnMinuteChangeEmitter.getForWindowed(lavAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-lav");
 
     }
 

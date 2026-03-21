@@ -6,10 +6,7 @@ import de.twiechert.linroad.kafka.core.serde.DefaultSerde;
 import de.twiechert.linroad.kafka.model.historical.*;
 import de.twiechert.linroad.kafka.stream.StreamBuilder;
 import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import org.apache.kafka.streams.kstream.*;
 
 
 /**
@@ -18,13 +15,11 @@ import org.springframework.stereotype.Component;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class DailyExpenditureResponseStreamBuilder extends StreamBuilder<Void, DailyExpenditureResponse> {
 
     public final static String TOPIC = "DAILY_EXP_RESP";
 
 
-    @Autowired
     public DailyExpenditureResponseStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }
@@ -38,7 +33,7 @@ public class DailyExpenditureResponseStreamBuilder extends StreamBuilder<Void, D
          */
         KStream<XwayVehicleIdDay, DailyExpenditureRequest> accountBalanceRequestsPerVehicleXwayAndDay =
                 dailyExpenditureRequestStream.map((k, v) -> new KeyValue<>(new XwayVehicleIdDay(k.getXWay(), k.getVehicleId(), k.getDay()), k))
-                        .through(new DefaultSerde<>(), new DefaultSerde<>(), context.topic("ACC_BALANCE_PER_XWAY_VEH_DAY"));
+                        .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("ACC_BALANCE_PER_XWAY_VEH_DAY")));
 
 
         return accountBalanceRequestsPerVehicleXwayAndDay.leftJoin(tollHistory,

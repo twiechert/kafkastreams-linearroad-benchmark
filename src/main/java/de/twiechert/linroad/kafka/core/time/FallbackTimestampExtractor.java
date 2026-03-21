@@ -13,16 +13,16 @@ import org.slf4j.LoggerFactory;
 public abstract class FallbackTimestampExtractor implements TimestampExtractor {
 
 
-    private WallclockTimestampExtractor wallclockTimestampExtractor = new WallclockTimestampExtractor();
+    private final WallclockTimestampExtractor wallclockTimestampExtractor = new WallclockTimestampExtractor();
 
 
     @Override
-    public long extract(ConsumerRecord<Object, Object> record) {
+    public long extract(ConsumerRecord<Object, Object> record, long partitionTime) {
         try {
             return this.extractTimestamp(record);
         } catch (Exception e) {
 
-            return wallclockTimestampExtractor.extract(record);
+            return wallclockTimestampExtractor.extract(record, partitionTime);
         }
     }
 

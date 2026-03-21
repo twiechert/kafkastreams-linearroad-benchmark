@@ -4,20 +4,17 @@ import de.twiechert.linroad.kafka.LinearRoadKafkaBenchmarkApplication;
 import de.twiechert.linroad.kafka.core.serde.DefaultSerde;
 import de.twiechert.linroad.kafka.model.*;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.kstream.JoinWindows;
-import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.*;
 import org.javatuples.Quartet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
+import java.time.Duration;
 
 /**
  * This stream generates a pair of the current toll and LAV per XwaySegmentDirection tuple
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  *
  */
-@Component
 public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection, CurrentToll> {
 
     public static final String TOPIC = "CURRENT_TOLL";
@@ -26,7 +23,6 @@ public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection
     private final static Logger logger = (Logger) LoggerFactory
             .getLogger(CurrentTollStreamBuilder.class);
 
-    @Autowired
     public CurrentTollStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
         super(context);
     }
@@ -36,14 +32,17 @@ public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection
                                                                 KStream<XwaySegmentDirection, NumberOfVehicles> numberOfVehiclesStream,
                                                                 KStream<XwaySegmentDirection, Long> accidentDetectionStream) {
         logger.debug("Building stream to calculate the current toll on expressway, segent, direction..");
-        return numberOfVehiclesStream.through(new DefaultSerde<>(), new DefaultSerde<>(), context.topic("LAV_TOLL"))
-                .join(latestAverageVelocityStream.through(new DefaultSerde<>(), new DefaultSerde<>(), context.topic("NOV_TOLL")),
+        return numberOfVehiclesStream
+                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("LAV_TOLL")))
+                .join(latestAverageVelocityStream
+                                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("NOV_TOLL"))),
                         (value1, value2) -> new CurrentTollIntermediate(value2.getMinute(), value2.getAverageSpeed(), value1.getNumberOfVehicles()),
-                        JoinWindows.of(context.topic("LAV-NOV-WINDOW")), new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>())
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
+                        StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))
                 .leftJoin(accidentDetectionStream,
                         (value1, value2) -> value1.setNoAccident(value2 == null),
-                        JoinWindows.of(context.topic("LAV_NOV_ACC_WINDOW")),
-                        new DefaultSerde<>(), new Serdes.LongSerde())
+                        JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
+                        StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new Serdes.LongSerde()))
                 .filter((k, v) -> v.isTollApplicable())
                 // otherwise calculate toll
                 .mapValues(CurrentTollIntermediate::calculateCurrentToll);

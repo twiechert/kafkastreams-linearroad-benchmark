@@ -1,0 +1,67 @@
+name: Build & Benchmark
+
+on:
+  push:
+    branches: [ master, 'claude/**' ]
+  pull_request:
+    branches: [ master ]
+
+# Skip existing runs on the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build
+        run: mvn clean compile -B
+
+      - name: Unit tests
+        run: mvn test -B -Dtest='!*Benchmark*' -DfailIfNoTests=false
+
+      - name: Package
+        run: mvn package -Dmaven.test.skip=true -B
+
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run L-Rating Benchmark
+        run: |
+          mvn test -B -Dtest='de.twiechert.linroad.kafka.benchmark.LRatingBenchmarkTest' \
+            -DfailIfNoTests=false \
+            -Dsurefire.timeout=1500
+
+      - name: Print benchmark results
+        if: always()
+        run: |
+          echo "=== Benchmark Results ==="
+          if [ -f target/surefire-reports/de.twiechert.linroad.kafka.benchmark.LRatingBenchmarkTest.txt ]; then
+            cat target/surefire-reports/de.twiechert.linroad.kafka.benchmark.LRatingBenchmarkTest.txt
+          else
+            echo "No benchmark report found"
+          fi

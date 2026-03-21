@@ -31,12 +31,11 @@ public class KryoSerde<T extends Serializable> implements Serde<T> {
     public static class KryoSerializer<A> implements Serializer<A> {
 
 
-        private ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
-            protected Kryo initialValue() {
-                return new Kryo();
-            }
-
-        };
+        private final ThreadLocal<Kryo> kryos = ThreadLocal.withInitial(() -> {
+            Kryo kryo = new Kryo();
+            kryo.setRegistrationRequired(false);
+            return kryo;
+        });
 
 
         @Override
@@ -47,11 +46,10 @@ public class KryoSerde<T extends Serializable> implements Serde<T> {
         @Override
         public byte[] serialize(String s, A a) {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            Output output = new Output(baos);
-            kryos.get().writeObject(output, a);
-            output.flush();
-            // Get the byte array from the underlying ByteArrayOutputStream,
-            // as it may be longer than the size of the Output stream.
+            try (Output output = new Output(baos)) {
+                kryos.get().writeObject(output, a);
+                output.flush();
+            }
             return baos.toByteArray();
         }
 
@@ -66,16 +64,14 @@ public class KryoSerde<T extends Serializable> implements Serde<T> {
 
         private final Class<A> classOb;
 
-        private ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
-            protected Kryo initialValue() {
-                return new Kryo();
-            }
-
-        };
+        private final ThreadLocal<Kryo> kryos = ThreadLocal.withInitial(() -> {
+            Kryo kryo = new Kryo();
+            kryo.setRegistrationRequired(false);
+            return kryo;
+        });
 
         public KryoDeserializer(Class<A> classOb) {
             this.classOb = classOb;
-            kryos.get().register(classOb);
         }
 
         @Override
@@ -85,9 +81,7 @@ public class KryoSerde<T extends Serializable> implements Serde<T> {
 
         @Override
         public A deserialize(String s, byte[] bytes) {
-
             return kryos.get().readObject(new ByteBufferInput(bytes), classOb);
-
         }
 
         @Override

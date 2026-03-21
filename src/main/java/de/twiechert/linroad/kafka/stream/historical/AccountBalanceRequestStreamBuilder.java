@@ -5,10 +5,9 @@ import de.twiechert.linroad.kafka.core.Void;
 import de.twiechert.linroad.kafka.core.serde.DefaultSerde;
 import de.twiechert.linroad.kafka.feeder.AccountBalanceRequestHandler;
 import de.twiechert.linroad.kafka.model.historical.AccountBalanceRequest;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KStreamBuilder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 
 /**
@@ -16,17 +15,16 @@ import org.springframework.stereotype.Component;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-@Component
 public class AccountBalanceRequestStreamBuilder {
 
-    @Autowired
     private LinearRoadKafkaBenchmarkApplication.Context context;
 
-    public AccountBalanceRequestStreamBuilder() {
+    public AccountBalanceRequestStreamBuilder(LinearRoadKafkaBenchmarkApplication.Context context) {
+        this.context = context;
     }
 
-    public KStream<AccountBalanceRequest, Void> getStream(KStreamBuilder builder) {
-        return builder.stream(new AccountBalanceRequest.Serde(),
-                new DefaultSerde<>(), context.topic(AccountBalanceRequestHandler.TOPIC));
+    public KStream<AccountBalanceRequest, Void> getStream(StreamsBuilder builder) {
+        return builder.stream(context.topic(AccountBalanceRequestHandler.TOPIC),
+                Consumed.with(new AccountBalanceRequest.Serde(), new DefaultSerde<>()));
     }
 }
