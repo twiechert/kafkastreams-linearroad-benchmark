@@ -63,7 +63,7 @@ public class AccidentDetectionStreamBuilder {
                         }
                         , Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream()
-                .map((k, v) -> new KeyValue<>(k.key(), v.setWindowEndMinute(Util.minuteOfReport(k.window().end()))))
+                .map((k, v) -> new KeyValue<>(k.key(), v.setWindowEndMinute(Util.minuteOfWindowEnd(k.window().end()))))
                   /*
                   There must be at least two cars emitting four consecutive position reports.
                  */

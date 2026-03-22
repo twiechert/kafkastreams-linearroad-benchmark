@@ -122,7 +122,7 @@ public class OnMinuteChangeEmitter {
 
         @Override
         public void close() {
-            kvStore.close();
+            // State store lifecycle is managed by Kafka Streams
         }
     }
 
@@ -186,7 +186,7 @@ public class OnMinuteChangeEmitter {
 
         @Override
         public void close() {
-            kvStore.close();
+            // State store lifecycle is managed by Kafka Streams
         }
     }
 

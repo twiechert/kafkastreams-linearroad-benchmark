@@ -46,7 +46,7 @@ public class NumberOfVehiclesStreamBuilder {
                     agg.getValue1().add(value.getValue0());
                     return new VehicleIdTimeIntermediate(value.getValue1(), agg.getValue1());
                 }, Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
-                .toStream().map((k, v) -> new KeyValue<>(k.key(), new NumberOfVehicles(Util.minuteOfReport(k.window().end()), v.getValue1().size())));
+                .toStream().map((k, v) -> new KeyValue<>(k.key(), new NumberOfVehicles(Util.minuteOfWindowEnd(k.window().end()), v.getValue1().size())));
 
         return OnMinuteChangeEmitter.get(novAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-nov");
 
