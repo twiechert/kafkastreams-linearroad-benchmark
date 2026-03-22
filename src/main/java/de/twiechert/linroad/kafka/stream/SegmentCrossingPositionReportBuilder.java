@@ -36,7 +36,7 @@ public class SegmentCrossingPositionReportBuilder {
 
         KStream<VehicleIdXwayDirection, SegmentCrossing> posReportByVehicleXwayDir = positionReports
                 .map((k, v) -> new KeyValue<>(new VehicleIdXwayDirection(v.getVehicleId(), k), new SegmentCrossing(v.getTime(), k.getSeg(), v.getLane())))
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("POS_BY_VEHICLE_XWAY_DIR")));
+                .repartition(Repartitioned.<VehicleIdXwayDirection, SegmentCrossing>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("POS_BY_VEHICLE_XWAY_DIR")));
 
         KStream<VehicleIdXwayDirection, SegmentCrossing> posReportByVehicleXwayDirShifted = positionReports
                 /*
@@ -44,7 +44,7 @@ public class SegmentCrossingPositionReportBuilder {
                   THIS IS NOT EQUAL TO USING BEFORE(), AFTER()
                  */
                 .map((k, v) -> new KeyValue<>(new VehicleIdXwayDirection(v.getVehicleId(), k), new SegmentCrossing(v.getTime() + 30, k.getSeg(), v.getLane())))
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("POS_BY_VEHICLE_XWAY_DIR_SHIFTED")));
+                .repartition(Repartitioned.<VehicleIdXwayDirection, SegmentCrossing>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("POS_BY_VEHICLE_XWAY_DIR_SHIFTED")));
 
         /*
           ... must calculate a toll every time a vehicle reports a position in a new segment, and notify the driver of this toll.

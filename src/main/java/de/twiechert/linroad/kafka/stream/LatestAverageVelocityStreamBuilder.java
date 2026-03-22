@@ -43,7 +43,7 @@ public class LatestAverageVelocityStreamBuilder {
                         (key, value, agg) -> LatestAverageVelocityIntermediate.fromLast(agg, value.getValue0(), value.getValue1()),
                         Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream()
-                .map((k, v) -> new KeyValue<>(k.key(), new AverageVelocity(Util.minuteOfReport(k.window().end()), v.getValue2(), v.getPosReportMinute())));
+                .map((k, v) -> new KeyValue<>(k.key(), new AverageVelocity(Util.minuteOfWindowEnd(k.window().end()), v.getValue2(), v.getPosReportMinute())));
 
         return OnMinuteChangeEmitter.getForWindowed(lavAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-lav");
 

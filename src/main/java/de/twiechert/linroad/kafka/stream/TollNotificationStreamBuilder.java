@@ -56,7 +56,7 @@ public class TollNotificationStreamBuilder extends StreamBuilder<Void, TollNotif
                         // for joining purpose we need the minute of the preceding position report, but we need to keep the exact timestamp for emitting
                         new ConsecutivePosReportIntermediate(Util.minuteOfReport(v.getTime()), v.getTime(), k.getVehicleId())))
                 // join with current toll stream, create VID, time, current time, speed , toll
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName("SEG_CROSSINGS_FOR_TOLL_NOT"));
+                .repartition(Repartitioned.<XwaySegmentDirection, ConsecutivePosReportIntermediate>with(new DefaultSerde<>(), new DefaultSerde<>()).withName("SEG_CROSSINGS_FOR_TOLL_NOT"));
 
         return segmentCrossingPerXwaySegmentDir
                 .join(currentTollStream, (psRep, currToll) -> new TollNotification(psRep.getVehicleId(), psRep.getTime(), LinearRoadKafkaBenchmarkApplication.Context.getCurrentRuntimeInSeconds(), currToll.getVelocity(), currToll.getToll()),

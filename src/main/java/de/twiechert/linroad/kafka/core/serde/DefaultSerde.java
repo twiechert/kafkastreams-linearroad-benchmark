@@ -1,6 +1,6 @@
 package de.twiechert.linroad.kafka.core.serde;
 
-import de.twiechert.linroad.kafka.core.serde.provider.FSTSerde;
+import de.twiechert.linroad.kafka.core.serde.provider.ByteArraySerde;
 import org.apache.kafka.common.serialization.Serializer;
 
 import java.io.Serializable;
@@ -11,10 +11,10 @@ import java.io.Serializable;
  *
  * @author Tayfun Wiechert <tayfun.wiechert@gmail.com>
  */
-public class DefaultSerde<T extends Serializable> extends FSTSerde<T> {
+public class DefaultSerde<T extends Serializable> extends ByteArraySerde<T> {
 
 
-    public static class DefaultSerializer<A> extends FSTSerde.FSTSerializer<A> implements Serializer<A> {
+    public static class DefaultSerializer<A> extends ByteArraySerde.BArraySerializer<A> implements Serializer<A> {
 
     }
 

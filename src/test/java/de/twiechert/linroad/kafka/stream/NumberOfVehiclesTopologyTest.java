@@ -50,7 +50,7 @@ class NumberOfVehiclesTopologyTest {
                         },
                         Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream()
-                .map((k, v) -> new KeyValue<>(k.key(), new NumberOfVehicles(Util.minuteOfReport(k.window().end()), v.vehicleIds.size())))
+                .map((k, v) -> new KeyValue<>(k.key(), new NumberOfVehicles(Util.minuteOfWindowEnd(k.window().end()), v.vehicleIds.size())))
                 .to(OUTPUT_TOPIC, Produced.with(new DefaultSerde<>(), new DefaultSerde<>()));
 
         Topology topology = builder.build();

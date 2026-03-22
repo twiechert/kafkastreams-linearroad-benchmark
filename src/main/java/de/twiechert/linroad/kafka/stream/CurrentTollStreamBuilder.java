@@ -33,9 +33,9 @@ public class CurrentTollStreamBuilder extends StreamBuilder<XwaySegmentDirection
                                                                 KStream<XwaySegmentDirection, Long> accidentDetectionStream) {
         logger.debug("Building stream to calculate the current toll on expressway, segent, direction..");
         return numberOfVehiclesStream
-                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("LAV_TOLL")))
+                .repartition(Repartitioned.<XwaySegmentDirection, NumberOfVehicles>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("LAV_TOLL")))
                 .join(latestAverageVelocityStream
-                                .repartition(Repartitioned.with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("NOV_TOLL"))),
+                                .repartition(Repartitioned.<XwaySegmentDirection, AverageVelocity>with(new DefaultSerde<>(), new DefaultSerde<>()).withName(context.topic("NOV_TOLL"))),
                         (value1, value2) -> new CurrentTollIntermediate(value2.getMinute(), value2.getAverageSpeed(), value1.getNumberOfVehicles()),
                         JoinWindows.ofTimeDifferenceWithNoGrace(Duration.ofSeconds(60)),
                         StreamJoined.with(new DefaultSerde<>(), new DefaultSerde<>(), new DefaultSerde<>()))

@@ -13,8 +13,19 @@ public class Util {
      * @param timestamp a tuple's timestamp
      * @return the execution method of the respective tuple
      */
-    public static long minuteOfReport(long timestamp) {
-        return (timestamp % 60 == 0) ? (timestamp / 60) : (timestamp / 60) + 1;
+    /**
+     * Given a timestamp in seconds, returns the execution minute according to the LR specification.
+     */
+    public static long minuteOfReport(long timestampSeconds) {
+        return (timestampSeconds % 60 == 0) ? (timestampSeconds / 60) : (timestampSeconds / 60) + 1;
+    }
+
+    /**
+     * Converts a Kafka window boundary (in milliseconds) to LR seconds, then computes the minute.
+     */
+    public static long minuteOfWindowEnd(long windowEndMs) {
+        long seconds = windowEndMs / 1000;
+        return minuteOfReport(seconds);
     }
 
     /**

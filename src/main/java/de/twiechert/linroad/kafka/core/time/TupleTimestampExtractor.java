@@ -46,12 +46,14 @@ public class TupleTimestampExtractor extends FallbackTimestampExtractor implemen
     private long extract(Object record) {
         /*
           DO NOT CHANGE ORDER!! TUPLE EXTRACTION HAS PRESEDENCE
+          Linear Road timestamps are in seconds — Kafka requires milliseconds.
          */
         if (record instanceof Tuple)
-            return (long) ((Tuple) record).getValue(pos);
+            return (long) ((Tuple) record).getValue(pos) * 1000L;
 
         else if (record instanceof TimedOnMinute) {
-            return ((TimedOnMinute) record).getMinute();
-        } else return (long) record;
+            // Minutes are already logical units, convert to ms epoch
+            return ((TimedOnMinute) record).getMinute() * 60_000L;
+        } else return (long) record * 1000L;
     }
 }
