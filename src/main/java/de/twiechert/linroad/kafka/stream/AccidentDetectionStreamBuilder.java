@@ -69,10 +69,11 @@ public class AccidentDetectionStreamBuilder {
                  */
                 .filter((k, v) -> v.getVehicleMap().entrySet().stream().filter(p -> p.getValue() >= 4).count() >= 2);
 
-        return OnMinuteChangeEmitter.getForWindowed(accDetection, new DefaultSerde<>(), new DefaultSerde<>(), "latest-acc")
+        KStream<XwayLaneDirSegPosIntermediate, AccidentDetectionValIntermediate> emitted = context.isSpeculativeEmit()
+                ? OnMinuteChangeEmitter.getSpeculativeWindowed(accDetection, new DefaultSerde<>(), new DefaultSerde<>(), "latest-acc-spec", 2)
+                : OnMinuteChangeEmitter.getForWindowed(accDetection, new DefaultSerde<>(), new DefaultSerde<>(), "latest-acc");
 
-
-
+        return emitted
                 // key -> xway, segment, direction | value -> minute in which accident has been detected
                 .flatMap((key, value0) ->
                         // creates range 0,1,2,3,4

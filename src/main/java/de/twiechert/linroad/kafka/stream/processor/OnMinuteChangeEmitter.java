@@ -13,7 +13,10 @@ import org.apache.kafka.streams.state.Stores;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -30,6 +33,67 @@ public class OnMinuteChangeEmitter {
     private static final Logger logger = LoggerFactory
             .getLogger(OnMinuteChangeEmitter.class);
 
+
+    /**
+     * Speculative emit: forwards the latest value per key every {@code intervalSeconds} using
+     * wall-clock punctuation. This trades duplicate/intermediate results for much lower latency
+     * compared to the minute-change approach.
+     */
+    public static <K, V extends TimedOnMinute> KStream<K, V> getSpeculative(KStream<K, V> sourceStream,
+                                                                             Serde<K> keySerde,
+                                                                             Serde<V> valueSerde,
+                                                                             String storeName,
+                                                                             int intervalSeconds) {
+        return sourceStream.process(() -> new SpeculativeEmitProcessor<>(intervalSeconds));
+    }
+
+    public static <K, V extends TimedOnMinute.TimedOnMinuteWithWindowEnd> KStream<K, V> getSpeculativeWindowed(KStream<K, V> sourceStream,
+                                                                                                                Serde<K> keySerde,
+                                                                                                                Serde<V> valueSerde,
+                                                                                                                String storeName,
+                                                                                                                int intervalSeconds) {
+        return sourceStream.process(() -> new SpeculativeEmitProcessor<>(intervalSeconds));
+    }
+
+    /**
+     * Processor that buffers the latest value per key and flushes all buffered values
+     * every N seconds using wall-clock punctuation. This gives near-realtime emission
+     * without flooding downstream operators with every intermediate aggregate update.
+     */
+    private static class SpeculativeEmitProcessor<K, V extends TimedOnMinute> implements Processor<K, V, K, V> {
+        private ProcessorContext<K, V> context;
+        private final Map<K, Record<K, V>> latestPerKey = new HashMap<>();
+        private final int intervalSeconds;
+
+        SpeculativeEmitProcessor(int intervalSeconds) {
+            this.intervalSeconds = intervalSeconds;
+        }
+
+        @Override
+        public void init(ProcessorContext<K, V> context) {
+            this.context = context;
+            context.schedule(Duration.ofSeconds(intervalSeconds),
+                    org.apache.kafka.streams.processor.PunctuationType.WALL_CLOCK_TIME,
+                    timestamp -> flush());
+        }
+
+        @Override
+        public void process(Record<K, V> record) {
+            latestPerKey.put(record.key(), record);
+        }
+
+        private void flush() {
+            for (Record<K, V> record : latestPerKey.values()) {
+                context.forward(record);
+            }
+            latestPerKey.clear();
+        }
+
+        @Override
+        public void close() {
+            flush();
+        }
+    }
 
     public static <K, V extends TimedOnMinute.TimedOnMinuteWithWindowEnd> KStream<K, V> getForWindowed(KStream<K, V> sourceStream,
                                                                                                        Serde<K> keySerde,

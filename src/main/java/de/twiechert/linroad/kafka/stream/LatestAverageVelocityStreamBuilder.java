@@ -45,6 +45,9 @@ public class LatestAverageVelocityStreamBuilder {
                 .toStream()
                 .map((k, v) -> new KeyValue<>(k.key(), new AverageVelocity(Util.minuteOfWindowEnd(k.window().end()), v.getValue2(), v.getPosReportMinute())));
 
+        if (context.isSpeculativeEmit()) {
+            return OnMinuteChangeEmitter.getSpeculativeWindowed(lavAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-lav-spec", 2);
+        }
         return OnMinuteChangeEmitter.getForWindowed(lavAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-lav");
 
     }

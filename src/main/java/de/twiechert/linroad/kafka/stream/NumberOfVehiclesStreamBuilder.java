@@ -48,6 +48,9 @@ public class NumberOfVehiclesStreamBuilder {
                 }, Materialized.with(new DefaultSerde<>(), new DefaultSerde<>()))
                 .toStream().map((k, v) -> new KeyValue<>(k.key(), new NumberOfVehicles(Util.minuteOfWindowEnd(k.window().end()), v.getValue1().size())));
 
+        if (context.isSpeculativeEmit()) {
+            return OnMinuteChangeEmitter.getSpeculative(novAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-nov-spec", 2);
+        }
         return OnMinuteChangeEmitter.get(novAgg, new DefaultSerde<>(), new DefaultSerde<>(), "latest-nov");
 
     }

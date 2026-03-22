@@ -259,12 +259,13 @@ public class LinearRoadKafkaBenchmarkApplication {
         private final String linearRoadMode;
         private final int numberOfThreads;
         private final boolean realtimeFeeding;
+        private final boolean speculativeEmit;
         private final String applicationId;
         private static DateTime benchmarkStartedAt = DateTime.now();
 
         public Context(String historicalFilePath, String filePath, List<String> debugMode,
                        String bootstrapServers, String linearRoadMode, int numberOfThreads,
-                       boolean realtimeFeeding) {
+                       boolean realtimeFeeding, boolean speculativeEmit) {
             this.historicalFilePath = historicalFilePath;
             this.filePath = filePath;
             this.debugMode = debugMode;
@@ -272,6 +273,7 @@ public class LinearRoadKafkaBenchmarkApplication {
             this.linearRoadMode = linearRoadMode;
             this.numberOfThreads = numberOfThreads;
             this.realtimeFeeding = realtimeFeeding;
+            this.speculativeEmit = speculativeEmit;
             this.applicationId = generator.generateByRegex("[0-9a-z]{3}");
             initializeBaseConfig();
         }
@@ -308,7 +310,8 @@ public class LinearRoadKafkaBenchmarkApplication {
                     props.getProperty("linearroad.kafka.bootstrapservers", "localhost:9092"),
                     props.getProperty("linearroad.mode", "all"),
                     Integer.parseInt(props.getProperty("linearroad.kafka.num_stream_threads", "0")),
-                    Boolean.parseBoolean(props.getProperty("linearroad.feeding.realtime", "false"))
+                    Boolean.parseBoolean(props.getProperty("linearroad.feeding.realtime", "false")),
+                    Boolean.parseBoolean(props.getProperty("linearroad.streaming.speculative_emit", "false"))
             );
         }
 
@@ -349,6 +352,7 @@ public class LinearRoadKafkaBenchmarkApplication {
         public StreamsBuilder getBuilder() { return builder; }
         public void setBuilder(StreamsBuilder builder) { this.builder = builder; }
         public boolean isRealtimeFeeding() { return realtimeFeeding; }
+        public boolean isSpeculativeEmit() { return speculativeEmit; }
         public BenchmarkMetrics getMetrics() { return metrics; }
         public void setMetrics(BenchmarkMetrics metrics) { this.metrics = metrics; }
     }
