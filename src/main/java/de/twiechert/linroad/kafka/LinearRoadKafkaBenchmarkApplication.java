@@ -141,9 +141,8 @@ public class LinearRoadKafkaBenchmarkApplication {
 
             KStream<Void, AccidentNotification> accidentNotificationStream = accidentNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, accidentDetectionStream);
             accidentNotificationStream.foreach((k, v) -> {
-                long latencyMs = (Context.getCurrentRuntimeInSeconds() * 1000);
                 metrics.recordProcessed("accident_notification");
-                metrics.recordResponseLatency("accident_notification", latencyMs > 0 ? latencyMs : 1);
+                metrics.recordResponseLatency("accident_notification", computeLatencyMs(v.getEmitTime()));
             });
 
             KStream<XwaySegmentDirection, CurrentToll> currentTollStream = currentTollStreamBuilder.getStream(latestAverageVelocityStream, numberOfVehiclesStream, accidentDetectionStream);
@@ -152,7 +151,7 @@ public class LinearRoadKafkaBenchmarkApplication {
             KStream<Void, TollNotification> tollNotificationStream = tollNotificationStreamBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
             tollNotificationStream.foreach((k, v) -> {
                 metrics.recordProcessed("toll_notification");
-                metrics.recordResponseLatency("toll_notification", 1);
+                metrics.recordResponseLatency("toll_notification", computeLatencyMs(v.getRequestTime()));
             });
 
             KTable<Integer, ExpenditureAt> tollPerVehicleTable = currentExpenditurePerVehicleTableBuilder.getStream(segmentCrossingPositionReportStream, currentTollStream);
@@ -161,15 +160,18 @@ public class LinearRoadKafkaBenchmarkApplication {
             KStream<Void, AccountBalanceResponse> accountBalanceResponseStream = accountBalanceResponseStreamBuilder.getStream(accountBalanceRequestStream, tollPerVehicleTable);
             accountBalanceResponseStream.foreach((k, v) -> {
                 metrics.recordProcessed("account_balance");
-                metrics.recordResponseLatency("account_balance", 1);
+                metrics.recordResponseLatency("account_balance", computeLatencyMs(v.getRequestTime()));
             });
 
             KStream<Void, DailyExpenditureResponse> dailyExpenditureResponseStream = dailyExpenditureResponseStreamBuilder.getStream(dailyExpenditureRequestStream, tollHistoryTable);
             dailyExpenditureResponseStream.foreach((k, v) -> {
                 metrics.recordProcessed("daily_expenditure");
-                metrics.recordResponseLatency("daily_expenditure", 1);
+                metrics.recordResponseLatency("daily_expenditure", computeLatencyMs(v.getRequestTime()));
             });
         }
+
+        // Latency = wall-clock now minus the time the event *should* have been produced in realtime
+        // eventTimeSeconds is the LR event timestamp (seconds since simulation start)
 
         KafkaStreams kafkaStreams = new KafkaStreams(builder.build(), context.getStreamBaseConfig());
         kafkaStreams.start();
@@ -183,6 +185,10 @@ public class LinearRoadKafkaBenchmarkApplication {
                 @Override
                 public void run() {
                     metrics.takeSnapshot();
+                    // Live metrics log every 5 seconds
+                    long elapsed = Context.getCurrentRuntimeInSeconds();
+                    logger.info("[LIVE] t={}s processed={} | {}",
+                            elapsed, metrics.getProcessedCount(), metrics.getLiveLatencySummary());
                 }
             }, 5000, 5000);
         }
@@ -222,6 +228,20 @@ public class LinearRoadKafkaBenchmarkApplication {
         }
 
         kafkaStreams.close();
+    }
+
+    /**
+     * Computes response latency: how long after the event's realtime moment did we produce the response.
+     * In realtime mode this is meaningful; in max-throughput mode it reflects processing delay.
+     *
+     * @param eventTimeSeconds the LR event timestamp in seconds since simulation start
+     * @return latency in milliseconds (clamped to >= 1)
+     */
+    private static long computeLatencyMs(long eventTimeSeconds) {
+        long wallClockElapsedMs = Context.getCurrentRuntimeInSeconds() * 1000;
+        long eventTimeMs = eventTimeSeconds * 1000;
+        long latencyMs = wallClockElapsedMs - eventTimeMs;
+        return Math.max(latencyMs, 1);
     }
 
     public static class Context {

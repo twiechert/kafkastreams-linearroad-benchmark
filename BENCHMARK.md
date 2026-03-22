@@ -1,6 +1,8 @@
 # Linear Road Benchmark Results
 
 Local benchmark results on a single-node Kafka (KRaft) with Docker.
+All results use **realtime feeding** — data is paced to match encoded event timestamps,
+so N minutes of simulated data takes N minutes of wall-clock time.
 
 ## Test Environment
 
@@ -12,58 +14,59 @@ Local benchmark results on a single-node Kafka (KRaft) with Docker.
 | Kafka Streams | 3.7.0 |
 | Partitions | 12 (all source and sink topics) |
 | Stream threads | 8 |
-| Feeding mode | Max throughput (non-realtime) |
+| Feeding mode | Realtime (paced to event timestamps) |
+| Vehicle density | ~200 cars/lane/segment (3600 vehicles/xway, spec-compliant) |
 
 ## Results
 
-### L=50 (50 expressways, 1000 vehicles/xway, 10 min simulated)
+### L=50 (50 expressways, 3600 vehicles/xway, 10 min simulated) — FAIL
 
 | Metric | Value |
 |---|---|
-| Duration | 108 seconds |
-| Toll notifications | 100,806 |
-| Account balance responses | 450 |
-| Daily expenditure responses | 450 |
-| **Total records processed** | **101,706** |
-| **Process throughput** | **939 records/sec** |
-| Kafka internal process rate | 1,747 records/sec |
-| Toll notification latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Account balance latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Daily expenditure latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Peak CPU | 44.4% |
-| Peak heap | 2,452 MB |
-| **Result** | **PASS — all latency requirements met** |
+| Wall-clock duration | ~490s (8.2 min) for 10 min simulated |
+| Toll notifications | 589,997 |
+| Account balance responses | 308 |
+| Daily expenditure responses | 315 |
+| **Total records processed** | **590,620** |
+| Toll notification latency | p50=222s, p99=315s, max=350s |
+| Account balance latency | p50=28s, p99=39s, max=42s |
+| Daily expenditure latency | p50=28s, p99=40s, max=43s |
+| Peak CPU | ~50% |
+| Peak heap | ~4.3 GB |
+| **Result** | **FAIL — all streams exceed 5s latency requirement** |
 
-### L=100 (100 expressways, 1000 vehicles/xway, 10 min simulated)
+### Analysis
 
-| Metric | Value |
-|---|---|
-| Duration | 159 seconds |
-| Toll notifications | 16,003 |
-| Account balance responses | 900 |
-| Daily expenditure responses | 900 |
-| **Total records processed** | **17,803** |
-| **Process throughput** | **112 records/sec** |
-| Kafka internal process rate | 2,952 records/sec |
-| Toll notification latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Account balance latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Daily expenditure latency | p50=1ms, p95=1ms, p99=1ms, max=1ms |
-| Peak CPU | 41.7% |
-| Peak heap | 2,461 MB |
-| **Result** | **PASS — all latency requirements met** |
+At L=50 with spec-compliant density (200 cars/lane/segment), the system cannot meet the 5-second
+latency requirement on a single local Kafka broker. The toll notification stream accumulates
+~3-5 minutes of processing lag behind realtime.
+
+Key bottlenecks:
+- Single Kafka broker limits partition throughput
+- Windowed joins and repartitioning create significant overhead
+- 180K records per 30-second tick overwhelms the local setup
+
+### Next Steps
+
+- Binary search for max achievable L-rating on this hardware
+- Test with multi-broker Kafka (AWS MSK) for proper scaling
+- Investigate JMX-based metrics for more accurate latency measurement
 
 ## Benchmark Configuration
 
-Data is generated using `LinearRoadDataGenerator` with vehicles clustered into 3 segments per expressway to ensure toll conditions (>50 vehicles per segment) and low average velocities (<40 mph) are met.
+Data is generated using `LinearRoadDataGenerator` with vehicles clustered into 3 segments
+per expressway to ensure toll conditions (>50 vehicles per segment) and low average velocities
+(<40 mph) are met. Density is ~200 cars/lane/segment per the LR specification.
 
 ### Running the Benchmark
 
 ```bash
-# Generate data and run
-just generate <xways> <duration_min> <vehicles_per_xway>
+# Generate data: just generate <xways> <duration_min> <vehicles_per_xway>
+just generate 50 10 3600
 
-# Configure and run
-# See justfile for full local benchmark: just local
+# Run with realtime feeding
+# Edit benchmark.properties to set linearroad.feeding.realtime=true
+java -jar target/kafka-linearroad-1.0-SNAPSHOT.jar benchmark-data/benchmark.properties
 ```
 
 ### Key Properties
@@ -75,6 +78,8 @@ just generate <xways> <duration_min> <vehicles_per_xway>
 
 ## Notes
 
-- Accident notifications are not yet triggered by the data generator — the accident detection conditions (2+ vehicles stopped at the exact same position for 4 consecutive 30s reports) require more precise data generation.
-- Partition count significantly impacts local performance: 12 partitions on a single broker outperforms 100 partitions due to reduced overhead.
-- The `Records ingested` counter in the report is not yet wired to the feeder — only output stream records are counted.
+- Latency is measured as `(wall_clock_elapsed - event_time)` — the delay between when an event
+  should have occurred in realtime and when the response was produced.
+- Live metrics are logged every 5 seconds during the run.
+- Partition count significantly impacts local performance: 12 partitions on a single broker
+  outperforms 100 partitions due to reduced overhead.

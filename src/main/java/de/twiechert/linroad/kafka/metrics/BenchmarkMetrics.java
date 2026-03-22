@@ -70,6 +70,25 @@ public class BenchmarkMetrics {
         recordsPerStream.computeIfAbsent(streamName, k -> new LongAdder()).increment();
     }
 
+    public long getProcessedCount() {
+        return recordsProcessed.sum();
+    }
+
+    /**
+     * Returns a compact live summary of latencies per response type.
+     */
+    public String getLiveLatencySummary() {
+        StringBuilder sb = new StringBuilder();
+        responseLatencies.forEach((name, tracker) -> {
+            LatencyStats stats = tracker.getStats();
+            if (stats.count() > 0) {
+                sb.append(String.format("%s: n=%d p50=%dms p99=%dms max=%dms | ",
+                        name, stats.count(), stats.p50Ms(), stats.p99Ms(), stats.maxMs()));
+            }
+        });
+        return sb.length() > 0 ? sb.toString() : "no responses yet";
+    }
+
     /**
      * Records a response latency (wall-clock time from trigger to response).
      *
